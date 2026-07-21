@@ -1,0 +1,18 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+	<PropertyGroup>
+		<OutputType>WinExe</OutputType>
+		<TargetFramework>net8.0-windows</TargetFramework>
+		<Nullable>enable</Nullable>
+		<UseWindowsForms>true</UseWindowsForms>
+		<ImplicitUsings>enable</ImplicitUsings>
+		<RootNamespace>PhotoboothPrintServer</RootNamespace>
+		<AssemblyName>PhotoboothPrintServer</AssemblyName>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<!-- Package resmi Microsoft, untuk query status printer via WMI -->
+		<PackageReference Include="System.Management" Version="8.0.0" />
+	</ItemGroup>
+
+</Project>
