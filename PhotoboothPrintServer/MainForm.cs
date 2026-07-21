@@ -11,26 +11,111 @@ public partial class MainForm : Form
     private readonly TestPrintService _testPrintService = new();
     private readonly AppSettingsService _settingsService = new();
 
+    private readonly PrintQueueService _printQueue = new();
+    private readonly PrintManager _printManager;
+    private readonly WebServerService _webServer;
+
     private AppSettings _settings = new();
     private List<PrinterInfo> _printers = new();
 
     public MainForm()
     {
         InitializeComponent();
+
+        _printManager = new PrintManager(_printQueue, _settingsService);
+        _webServer = new WebServerService(_printQueue, _settingsService);
+
         Load += MainForm_Load;
     }
 
-    private void MainForm_Load(object? sender, EventArgs e)
+    private async void MainForm_Load(object? sender, EventArgs e)
     {
         _settings = _settingsService.Load();
 
         lblIpValue.Text = NetworkUtils.GetLocalIPv4Address();
         lblPortValue.Text = _settings.ApiPort.ToString();
-        lblServerStatusValue.Text = "Not Started (Fase 2)";
+        lblApiUrlValue.Text = $"http://{lblIpValue.Text}:{_settings.ApiPort}";
+        lblServerStatusValue.Text = "Starting...";
         lblServerStatusValue.ForeColor = Color.Gray;
 
+        _printQueue.LogMessage += AppendLog;
+        _printManager.LogMessage += AppendLog;
+        _printManager.StateChanged += PrintManager_StateChanged;
+
+        _printManager.Start();
+
         RefreshPrinterList();
+        RefreshQueueUi();
+
+        await StartServerAsync();
     }
+
+    protected override void OnFormClosing(FormClosingEventArgs e)
+    {
+        try
+        {
+            _printManager.Stop();
+            _webServer.StopAsync().GetAwaiter().GetResult();
+        }
+        catch
+        {
+            // Diabaikan saat aplikasi ditutup.
+        }
+
+        base.OnFormClosing(e);
+    }
+
+    // ===================== Server (HTTP API) =====================
+
+    private async Task StartServerAsync()
+    {
+        btnToggleServer.Enabled = false;
+        AppendLog($"Menjalankan HTTP API di port {_settings.ApiPort}...");
+
+        bool ok = await _webServer.StartAsync(_settings.ApiPort);
+
+        if (ok)
+        {
+            lblServerStatusValue.Text = "Running";
+            lblServerStatusValue.ForeColor = Color.DarkGreen;
+            btnToggleServer.Text = "Stop Server";
+            AppendLog($"HTTP API berjalan di {lblApiUrlValue.Text}");
+        }
+        else
+        {
+            lblServerStatusValue.Text = "Failed to start";
+            lblServerStatusValue.ForeColor = Color.Red;
+            btnToggleServer.Text = "Start Server";
+            AppendLog($"Gagal menjalankan HTTP API: {_webServer.LastError}");
+        }
+
+        btnToggleServer.Enabled = true;
+    }
+
+    private async Task StopServerAsync()
+    {
+        btnToggleServer.Enabled = false;
+        AppendLog("Menghentikan HTTP API...");
+
+        await _webServer.StopAsync();
+
+        lblServerStatusValue.Text = "Stopped";
+        lblServerStatusValue.ForeColor = Color.Gray;
+        btnToggleServer.Text = "Start Server";
+        AppendLog("HTTP API dihentikan.");
+
+        btnToggleServer.Enabled = true;
+    }
+
+    private async void btnToggleServer_Click(object? sender, EventArgs e)
+    {
+        if (_webServer.IsRunning)
+            await StopServerAsync();
+        else
+            await StartServerAsync();
+    }
+
+    // ===================== Printer (Fase 1) =====================
 
     private void btnRefresh_Click(object? sender, EventArgs e)
     {
@@ -138,6 +223,47 @@ public partial class MainForm : Form
         btnTestPrint.Enabled = true;
     }
 
+    // ===================== Print Queue (Fase 2) =====================
+
+    private void PrintManager_StateChanged()
+    {
+        if (InvokeRequired)
+        {
+            Invoke(new Action(RefreshQueueUi));
+        }
+        else
+        {
+            RefreshQueueUi();
+        }
+    }
+
+    private void RefreshQueueUi()
+    {
+        lblQueueLengthValue.Text = _printQueue.PendingCount.ToString();
+        lblCurrentJobValue.Text = _printManager.CurrentJob != null
+            ? $"{_printManager.CurrentJob.JobId} ({_printManager.CurrentJob.FileName})"
+            : "-";
+        lblTotalPrintedValue.Text = _printManager.TotalPrinted.ToString();
+        lblTotalFailedValue.Text = _printManager.TotalFailed.ToString();
+
+        lvQueue.BeginUpdate();
+        lvQueue.Items.Clear();
+
+        foreach (var job in _printQueue.GetAllJobs())
+        {
+            var item = new ListViewItem(job.JobId);
+            item.SubItems.Add(job.FileName);
+            item.SubItems.Add(job.Copies.ToString());
+            item.SubItems.Add(job.Status.ToString());
+            item.SubItems.Add(job.ErrorMessage ?? string.Empty);
+            lvQueue.Items.Add(item);
+        }
+
+        lvQueue.EndUpdate();
+    }
+
+    // ===================== Logging =====================
+
     private void AppendLog(string message)
     {
         string line = $"[{DateTime.Now:HH:mm:ss}] {message}";
@@ -149,6 +275,16 @@ public partial class MainForm : Form
         else
         {
             AppendLogInternal(line);
+        }
+
+        // Update queue UI juga saat ada log terkait job (mis. job baru diterima).
+        if (InvokeRequired)
+        {
+            Invoke(new Action(RefreshQueueUi));
+        }
+        else
+        {
+            RefreshQueueUi();
         }
     }
 

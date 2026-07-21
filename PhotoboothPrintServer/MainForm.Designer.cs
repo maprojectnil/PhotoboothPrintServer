@@ -14,6 +14,7 @@ partial class MainForm
     }
 
     private Label lblTitle = null!;
+
     private GroupBox grpServer = null!;
     private Label lblServerStatusCaption = null!;
     private Label lblServerStatusValue = null!;
@@ -21,6 +22,9 @@ partial class MainForm
     private Label lblIpValue = null!;
     private Label lblPortCaption = null!;
     private Label lblPortValue = null!;
+    private Label lblApiUrlCaption = null!;
+    private Label lblApiUrlValue = null!;
+    private Button btnToggleServer = null!;
 
     private GroupBox grpPrinter = null!;
     private Label lblPrinterCaption = null!;
@@ -30,12 +34,24 @@ partial class MainForm
     private Label lblPrinterStatusValue = null!;
     private Button btnTestPrint = null!;
 
+    private GroupBox grpQueue = null!;
+    private Label lblQueueLengthCaption = null!;
+    private Label lblQueueLengthValue = null!;
+    private Label lblCurrentJobCaption = null!;
+    private Label lblCurrentJobValue = null!;
+    private Label lblTotalPrintedCaption = null!;
+    private Label lblTotalPrintedValue = null!;
+    private Label lblTotalFailedCaption = null!;
+    private Label lblTotalFailedValue = null!;
+    private ListView lvQueue = null!;
+
     private GroupBox grpLog = null!;
     private TextBox txtLog = null!;
 
     private void InitializeComponent()
     {
         lblTitle = new Label();
+
         grpServer = new GroupBox();
         lblServerStatusCaption = new Label();
         lblServerStatusValue = new Label();
@@ -43,6 +59,9 @@ partial class MainForm
         lblIpValue = new Label();
         lblPortCaption = new Label();
         lblPortValue = new Label();
+        lblApiUrlCaption = new Label();
+        lblApiUrlValue = new Label();
+        btnToggleServer = new Button();
 
         grpPrinter = new GroupBox();
         lblPrinterCaption = new Label();
@@ -51,6 +70,17 @@ partial class MainForm
         lblPrinterStatusCaption = new Label();
         lblPrinterStatusValue = new Label();
         btnTestPrint = new Button();
+
+        grpQueue = new GroupBox();
+        lblQueueLengthCaption = new Label();
+        lblQueueLengthValue = new Label();
+        lblCurrentJobCaption = new Label();
+        lblCurrentJobValue = new Label();
+        lblTotalPrintedCaption = new Label();
+        lblTotalPrintedValue = new Label();
+        lblTotalFailedCaption = new Label();
+        lblTotalFailedValue = new Label();
+        lvQueue = new ListView();
 
         grpLog = new GroupBox();
         txtLog = new TextBox();
@@ -64,7 +94,7 @@ partial class MainForm
         // grpServer
         grpServer.Text = "Server Info";
         grpServer.Location = new Point(20, 55);
-        grpServer.Size = new Size(680, 100);
+        grpServer.Size = new Size(680, 130);
         grpServer.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
 
         lblServerStatusCaption.Text = "Status Server:";
@@ -94,16 +124,34 @@ partial class MainForm
         lblPortValue.AutoSize = true;
         lblPortValue.Font = new Font("Segoe UI", 9, FontStyle.Bold);
 
+        lblApiUrlCaption.Text = "API URL:";
+        lblApiUrlCaption.Location = new Point(15, 100);
+        lblApiUrlCaption.AutoSize = true;
+
+        lblApiUrlValue.Text = "-";
+        lblApiUrlValue.Location = new Point(150, 100);
+        lblApiUrlValue.AutoSize = true;
+        lblApiUrlValue.Font = new Font("Segoe UI", 9, FontStyle.Bold);
+
+        btnToggleServer.Text = "Start Server";
+        btnToggleServer.Location = new Point(515, 55);
+        btnToggleServer.Size = new Size(140, 32);
+        btnToggleServer.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+        btnToggleServer.Click += btnToggleServer_Click;
+
         grpServer.Controls.Add(lblServerStatusCaption);
         grpServer.Controls.Add(lblServerStatusValue);
         grpServer.Controls.Add(lblIpCaption);
         grpServer.Controls.Add(lblIpValue);
         grpServer.Controls.Add(lblPortCaption);
         grpServer.Controls.Add(lblPortValue);
+        grpServer.Controls.Add(lblApiUrlCaption);
+        grpServer.Controls.Add(lblApiUrlValue);
+        grpServer.Controls.Add(btnToggleServer);
 
         // grpPrinter
         grpPrinter.Text = "Printer";
-        grpPrinter.Location = new Point(20, 165);
+        grpPrinter.Location = new Point(20, 195);
         grpPrinter.Size = new Size(680, 150);
         grpPrinter.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
 
@@ -143,14 +191,78 @@ partial class MainForm
         grpPrinter.Controls.Add(lblPrinterStatusValue);
         grpPrinter.Controls.Add(btnTestPrint);
 
+        // grpQueue
+        grpQueue.Text = "HTTP API && Print Queue";
+        grpQueue.Location = new Point(20, 355);
+        grpQueue.Size = new Size(680, 240);
+        grpQueue.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
+
+        lblQueueLengthCaption.Text = "Queue Length:";
+        lblQueueLengthCaption.Location = new Point(15, 25);
+        lblQueueLengthCaption.AutoSize = true;
+
+        lblQueueLengthValue.Text = "0";
+        lblQueueLengthValue.Location = new Point(150, 25);
+        lblQueueLengthValue.AutoSize = true;
+        lblQueueLengthValue.Font = new Font("Segoe UI", 9, FontStyle.Bold);
+
+        lblCurrentJobCaption.Text = "Current Job:";
+        lblCurrentJobCaption.Location = new Point(15, 50);
+        lblCurrentJobCaption.AutoSize = true;
+
+        lblCurrentJobValue.Text = "-";
+        lblCurrentJobValue.Location = new Point(150, 50);
+        lblCurrentJobValue.AutoSize = true;
+        lblCurrentJobValue.Font = new Font("Segoe UI", 9, FontStyle.Bold);
+
+        lblTotalPrintedCaption.Text = "Total Printed:";
+        lblTotalPrintedCaption.Location = new Point(350, 25);
+        lblTotalPrintedCaption.AutoSize = true;
+
+        lblTotalPrintedValue.Text = "0";
+        lblTotalPrintedValue.Location = new Point(470, 25);
+        lblTotalPrintedValue.AutoSize = true;
+        lblTotalPrintedValue.Font = new Font("Segoe UI", 9, FontStyle.Bold);
+
+        lblTotalFailedCaption.Text = "Total Failed:";
+        lblTotalFailedCaption.Location = new Point(350, 50);
+        lblTotalFailedCaption.AutoSize = true;
+
+        lblTotalFailedValue.Text = "0";
+        lblTotalFailedValue.Location = new Point(470, 50);
+        lblTotalFailedValue.AutoSize = true;
+        lblTotalFailedValue.Font = new Font("Segoe UI", 9, FontStyle.Bold);
+
+        lvQueue.Location = new Point(15, 80);
+        lvQueue.Size = new Size(650, 145);
+        lvQueue.View = View.Details;
+        lvQueue.FullRowSelect = true;
+        lvQueue.GridLines = true;
+        lvQueue.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
+        lvQueue.Columns.Add("Job ID", 90);
+        lvQueue.Columns.Add("File", 220);
+        lvQueue.Columns.Add("Copies", 70);
+        lvQueue.Columns.Add("Status", 100);
+        lvQueue.Columns.Add("Error", 150);
+
+        grpQueue.Controls.Add(lblQueueLengthCaption);
+        grpQueue.Controls.Add(lblQueueLengthValue);
+        grpQueue.Controls.Add(lblCurrentJobCaption);
+        grpQueue.Controls.Add(lblCurrentJobValue);
+        grpQueue.Controls.Add(lblTotalPrintedCaption);
+        grpQueue.Controls.Add(lblTotalPrintedValue);
+        grpQueue.Controls.Add(lblTotalFailedCaption);
+        grpQueue.Controls.Add(lblTotalFailedValue);
+        grpQueue.Controls.Add(lvQueue);
+
         // grpLog
         grpLog.Text = "Log";
-        grpLog.Location = new Point(20, 325);
-        grpLog.Size = new Size(680, 200);
+        grpLog.Location = new Point(20, 605);
+        grpLog.Size = new Size(680, 150);
         grpLog.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
 
         txtLog.Location = new Point(15, 25);
-        txtLog.Size = new Size(650, 160);
+        txtLog.Size = new Size(650, 110);
         txtLog.Multiline = true;
         txtLog.ScrollBars = ScrollBars.Vertical;
         txtLog.ReadOnly = true;
@@ -161,14 +273,15 @@ partial class MainForm
 
         // MainForm
         AutoScaleMode = AutoScaleMode.Font;
-        ClientSize = new Size(720, 550);
-        MinimumSize = new Size(600, 450);
+        ClientSize = new Size(720, 780);
+        MinimumSize = new Size(680, 650);
         Text = "Photobooth Print Server";
         StartPosition = FormStartPosition.CenterScreen;
 
         Controls.Add(lblTitle);
         Controls.Add(grpServer);
         Controls.Add(grpPrinter);
+        Controls.Add(grpQueue);
         Controls.Add(grpLog);
     }
 }
