@@ -13,6 +13,8 @@
 	<ItemGroup>
 		<!-- Package resmi Microsoft, untuk query status printer via WMI -->
 		<PackageReference Include="System.Management" Version="8.0.0" />
+		<!-- mDNS / DNS-SD (RFC 6762/6763) - untuk auto discovery Android, fork aktif net-mdns -->
+		<PackageReference Include="Makaretu.Dns.Multicast.New" Version="0.38.0" />
 	</ItemGroup>
 
 	<ItemGroup>

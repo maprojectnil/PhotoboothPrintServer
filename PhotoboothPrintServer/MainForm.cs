@@ -15,6 +15,8 @@ public partial class MainForm : Form
     private readonly PrintQueueService _printQueue = new();
     private readonly PrintManager _printManager;
     private readonly WebServerService _webServer;
+    private readonly MdnsService _mdnsService = new();
+    private readonly WebSocketBroadcastService _wsBroadcast = new();
 
     private AppSettings _settings = new();
     private List<PrinterInfo> _printers = new();
@@ -26,7 +28,7 @@ public partial class MainForm : Form
         InitializeComponent();
 
         _printManager = new PrintManager(_printQueue, _settingsService, _profileStore);
-        _webServer = new WebServerService(_printQueue, _settingsService);
+        _webServer = new WebServerService(_printQueue, _settingsService, _wsBroadcast);
 
         Load += MainForm_Load;
     }
@@ -40,10 +42,15 @@ public partial class MainForm : Form
         lblApiUrlValue.Text = $"http://{lblIpValue.Text}:{_settings.ApiPort}";
         lblServerStatusValue.Text = "Starting...";
         lblServerStatusValue.ForeColor = Color.Gray;
+        lblMdnsValue.Text = "-";
+        lblMdnsValue.ForeColor = Color.Gray;
 
         _printQueue.LogMessage += AppendLog;
         _printManager.LogMessage += AppendLog;
         _printManager.StateChanged += PrintManager_StateChanged;
+        _mdnsService.LogMessage += AppendLog;
+        _wsBroadcast.LogMessage += AppendLog;
+        _printQueue.JobStatusChanged += job => _ = _wsBroadcast.BroadcastJobStatusAsync(job);
 
         _printManager.Start();
 
@@ -58,6 +65,7 @@ public partial class MainForm : Form
         try
         {
             _printManager.Stop();
+            _mdnsService.Stop();
             _webServer.StopAsync().GetAwaiter().GetResult();
         }
         catch
@@ -83,6 +91,20 @@ public partial class MainForm : Form
             lblServerStatusValue.ForeColor = Color.DarkGreen;
             btnToggleServer.Text = "Stop Server";
             AppendLog($"HTTP API berjalan di {lblApiUrlValue.Text}");
+
+            string instanceName = $"PhotoboothPrintServer-{Environment.MachineName}";
+            _mdnsService.Start(_settings.ApiPort, instanceName);
+
+            if (_mdnsService.IsRunning)
+            {
+                lblMdnsValue.Text = $"Advertising ({_mdnsService.InstanceName})";
+                lblMdnsValue.ForeColor = Color.DarkGreen;
+            }
+            else
+            {
+                lblMdnsValue.Text = "Gagal - gunakan input IP manual";
+                lblMdnsValue.ForeColor = Color.DarkOrange;
+            }
         }
         else
         {
@@ -99,6 +121,10 @@ public partial class MainForm : Form
     {
         btnToggleServer.Enabled = false;
         AppendLog("Menghentikan HTTP API...");
+
+        _mdnsService.Stop();
+        lblMdnsValue.Text = "Stopped";
+        lblMdnsValue.ForeColor = Color.Gray;
 
         await _webServer.StopAsync();
 

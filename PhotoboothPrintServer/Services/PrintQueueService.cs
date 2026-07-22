@@ -17,6 +17,9 @@ public class PrintQueueService
     /// <summary>Dipicu setiap ada job baru masuk antrean.</summary>
     public event Action? QueueChanged;
 
+    /// <summary>Dipicu setiap status sebuah job berubah (Queued/Printing/Completed/Failed) - untuk WebSocket real-time.</summary>
+    public event Action<PrintJob>? JobStatusChanged;
+
     /// <summary>Dipicu untuk pesan log (mis. "Job JOB-001 diterima").</summary>
     public event Action<string>? LogMessage;
 
@@ -40,9 +43,16 @@ public class PrintQueueService
 
         LogMessage?.Invoke($"Job {jobId} diterima: {fileName} ({copies}x copy).");
         QueueChanged?.Invoke();
+        JobStatusChanged?.Invoke(job);
 
         return job;
     }
+
+    /// <summary>
+    /// Dipanggil (mis. oleh PrintManager) setiap kali status sebuah job berubah,
+    /// agar client WebSocket yang terhubung menerima update real-time.
+    /// </summary>
+    public void NotifyStatusChanged(PrintJob job) => JobStatusChanged?.Invoke(job);
 
     public bool TryDequeue(out PrintJob? job) => _pending.TryDequeue(out job);
 

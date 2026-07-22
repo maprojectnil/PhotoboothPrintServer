@@ -78,6 +78,7 @@ public class PrintManager
 
         LogMessage?.Invoke($"Mencetak {job.JobId} ({job.FileName}) x{job.Copies}...");
         StateChanged?.Invoke();
+        _queue.NotifyStatusChanged(job);
 
         try
         {
@@ -92,6 +93,7 @@ public class PrintManager
             TotalPrinted++;
 
             LogMessage?.Invoke($"{job.JobId} selesai dicetak.");
+            _queue.NotifyStatusChanged(job);
 
             TryDeleteTempFile(job.FilePath);
         }
@@ -103,6 +105,7 @@ public class PrintManager
             TotalFailed++;
 
             LogMessage?.Invoke($"{job.JobId} gagal: {ex.Message}");
+            _queue.NotifyStatusChanged(job);
         }
         finally
         {

@@ -11,7 +11,8 @@ namespace PhotoboothPrintServer.Services;
 
 /// <summary>
 /// Menjalankan HTTP API (Kestrel + Minimal API) di dalam proses WinForms yang sama.
-/// Endpoint: POST /print, GET /status, GET /jobs/{jobId}
+/// Endpoint HTTP: POST /print, GET /status, GET /jobs/{jobId} (tidak berubah dari Fase 1/2).
+/// Endpoint WebSocket: /ws/status - broadcast real-time status Print Job (Fase 3 - STEP 3).
 /// </summary>
 public class WebServerService
 {
@@ -20,6 +21,7 @@ public class WebServerService
 
     private readonly PrintQueueService _queue;
     private readonly AppSettingsService _settingsService;
+    private readonly WebSocketBroadcastService _wsBroadcast;
     private readonly string _incomingFolder;
 
     private WebApplication? _app;
@@ -27,10 +29,11 @@ public class WebServerService
     public bool IsRunning { get; private set; }
     public string? LastError { get; private set; }
 
-    public WebServerService(PrintQueueService queue, AppSettingsService settingsService)
+    public WebServerService(PrintQueueService queue, AppSettingsService settingsService, WebSocketBroadcastService wsBroadcast)
     {
         _queue = queue;
         _settingsService = settingsService;
+        _wsBroadcast = wsBroadcast;
 
         _incomingFolder = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
@@ -59,6 +62,8 @@ public class WebServerService
             });
 
             _app = builder.Build();
+
+            _app.UseWebSockets();
 
             MapEndpoints(_app);
 
@@ -98,6 +103,27 @@ public class WebServerService
 
     private void MapEndpoints(WebApplication app)
     {
+        // ===== WebSocket real-time status (Fase 3 - STEP 3) =====
+        // Android connect ke sini untuk menerima update status Print Job secara real-time.
+        // HTTP API di bawah (/status, /jobs/{jobId}, /print) tetap berjalan seperti biasa
+        // dan tidak digantikan oleh endpoint ini.
+        app.Map("/ws/status", async (HttpContext context) =>
+        {
+            if (!context.WebSockets.IsWebSocketRequest)
+            {
+                context.Response.StatusCode = StatusCodes.Status400BadRequest;
+                await context.Response.WriteAsJsonAsync(new
+                {
+                    success = false,
+                    message = "Endpoint ini hanya menerima koneksi WebSocket."
+                });
+                return;
+            }
+
+            using var socket = await context.WebSockets.AcceptWebSocketAsync();
+            await _wsBroadcast.HandleClientAsync(socket, context.RequestAborted);
+        });
+
         app.MapGet("/status", () =>
         {
             AppSettings settings = _settingsService.Load();
@@ -108,7 +134,8 @@ public class WebServerService
                 server = "running",
                 printer = hasPrinter ? settings.SelectedPrinter : "(belum dipilih)",
                 printerStatus = hasPrinter ? "ready" : "not-configured",
-                queueLength = _queue.PendingCount
+                queueLength = _queue.PendingCount,
+                webSocketClients = _wsBroadcast.ConnectedClients
             });
         });
 

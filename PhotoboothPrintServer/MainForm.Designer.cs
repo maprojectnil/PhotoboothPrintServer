@@ -24,6 +24,8 @@ partial class MainForm
     private Label lblPortValue = null!;
     private Label lblApiUrlCaption = null!;
     private Label lblApiUrlValue = null!;
+    private Label lblMdnsCaption = null!;
+    private Label lblMdnsValue = null!;
     private Button btnToggleServer = null!;
 
     private GroupBox grpPrinter = null!;
@@ -74,6 +76,8 @@ partial class MainForm
         lblPortValue = new Label();
         lblApiUrlCaption = new Label();
         lblApiUrlValue = new Label();
+        lblMdnsCaption = new Label();
+        lblMdnsValue = new Label();
         btnToggleServer = new Button();
 
         grpPrinter = new GroupBox();
@@ -120,7 +124,7 @@ partial class MainForm
         // grpServer
         grpServer.Text = "Server Info";
         grpServer.Location = new Point(20, 55);
-        grpServer.Size = new Size(680, 130);
+        grpServer.Size = new Size(680, 155);
         grpServer.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
 
         lblServerStatusCaption.Text = "Status Server:";
@@ -159,6 +163,15 @@ partial class MainForm
         lblApiUrlValue.AutoSize = true;
         lblApiUrlValue.Font = new Font("Segoe UI", 9, FontStyle.Bold);
 
+        lblMdnsCaption.Text = "mDNS Discovery:";
+        lblMdnsCaption.Location = new Point(15, 125);
+        lblMdnsCaption.AutoSize = true;
+
+        lblMdnsValue.Text = "-";
+        lblMdnsValue.Location = new Point(150, 125);
+        lblMdnsValue.AutoSize = true;
+        lblMdnsValue.Font = new Font("Segoe UI", 9, FontStyle.Bold);
+
         btnToggleServer.Text = "Start Server";
         btnToggleServer.Location = new Point(515, 55);
         btnToggleServer.Size = new Size(140, 32);
@@ -173,11 +186,13 @@ partial class MainForm
         grpServer.Controls.Add(lblPortValue);
         grpServer.Controls.Add(lblApiUrlCaption);
         grpServer.Controls.Add(lblApiUrlValue);
+        grpServer.Controls.Add(lblMdnsCaption);
+        grpServer.Controls.Add(lblMdnsValue);
         grpServer.Controls.Add(btnToggleServer);
 
         // grpPrinter
         grpPrinter.Text = "Printer";
-        grpPrinter.Location = new Point(20, 195);
+        grpPrinter.Location = new Point(20, 220);
         grpPrinter.Size = new Size(680, 150);
         grpPrinter.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
 
@@ -219,7 +234,7 @@ partial class MainForm
 
         // grpPrinterProfile
         grpPrinterProfile.Text = "Printer Profile";
-        grpPrinterProfile.Location = new Point(20, 355);
+        grpPrinterProfile.Location = new Point(20, 380);
         grpPrinterProfile.Size = new Size(680, 170);
         grpPrinterProfile.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
 
@@ -290,7 +305,7 @@ partial class MainForm
 
         // grpQueue
         grpQueue.Text = "HTTP API && Print Queue";
-        grpQueue.Location = new Point(20, 535);
+        grpQueue.Location = new Point(20, 560);
         grpQueue.Size = new Size(680, 240);
         grpQueue.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
 
@@ -354,7 +369,7 @@ partial class MainForm
 
         // grpLog
         grpLog.Text = "Log";
-        grpLog.Location = new Point(20, 785);
+        grpLog.Location = new Point(20, 810);
         grpLog.Size = new Size(680, 150);
         grpLog.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
 
@@ -370,8 +385,8 @@ partial class MainForm
 
         // MainForm
         AutoScaleMode = AutoScaleMode.Font;
-        ClientSize = new Size(720, 960);
-        MinimumSize = new Size(680, 830);
+        ClientSize = new Size(720, 985);
+        MinimumSize = new Size(680, 855);
         Text = "Photobooth Print Server";
         StartPosition = FormStartPosition.CenterScreen;
 
