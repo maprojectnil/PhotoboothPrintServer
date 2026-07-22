@@ -34,6 +34,19 @@ partial class MainForm
     private Label lblPrinterStatusValue = null!;
     private Button btnTestPrint = null!;
 
+    private GroupBox grpPrinterProfile = null!;
+    private Label lblPaperSizeCaption = null!;
+    private ComboBox cmbPaperSize = null!;
+    private Label lblPrintQualityCaption = null!;
+    private ComboBox cmbPrintQuality = null!;
+    private Label lblColorModeCaption = null!;
+    private ComboBox cmbColorMode = null!;
+    private Label lblOrientationCaption = null!;
+    private ComboBox cmbOrientation = null!;
+    private CheckBox chkBorderless = null!;
+    private Label lblProfileInfoCaption = null!;
+    private Label lblProfileInfoValue = null!;
+
     private GroupBox grpQueue = null!;
     private Label lblQueueLengthCaption = null!;
     private Label lblQueueLengthValue = null!;
@@ -70,6 +83,19 @@ partial class MainForm
         lblPrinterStatusCaption = new Label();
         lblPrinterStatusValue = new Label();
         btnTestPrint = new Button();
+
+        grpPrinterProfile = new GroupBox();
+        lblPaperSizeCaption = new Label();
+        cmbPaperSize = new ComboBox();
+        lblPrintQualityCaption = new Label();
+        cmbPrintQuality = new ComboBox();
+        lblColorModeCaption = new Label();
+        cmbColorMode = new ComboBox();
+        lblOrientationCaption = new Label();
+        cmbOrientation = new ComboBox();
+        chkBorderless = new CheckBox();
+        lblProfileInfoCaption = new Label();
+        lblProfileInfoValue = new Label();
 
         grpQueue = new GroupBox();
         lblQueueLengthCaption = new Label();
@@ -191,9 +217,80 @@ partial class MainForm
         grpPrinter.Controls.Add(lblPrinterStatusValue);
         grpPrinter.Controls.Add(btnTestPrint);
 
+        // grpPrinterProfile
+        grpPrinterProfile.Text = "Printer Profile";
+        grpPrinterProfile.Location = new Point(20, 355);
+        grpPrinterProfile.Size = new Size(680, 170);
+        grpPrinterProfile.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
+
+        lblPaperSizeCaption.Text = "Paper Size:";
+        lblPaperSizeCaption.Location = new Point(15, 28);
+        lblPaperSizeCaption.AutoSize = true;
+
+        cmbPaperSize.Location = new Point(150, 25);
+        cmbPaperSize.Size = new Size(200, 25);
+        cmbPaperSize.DropDownStyle = ComboBoxStyle.DropDownList;
+        cmbPaperSize.SelectedIndexChanged += ProfileControl_Changed;
+
+        lblPrintQualityCaption.Text = "Print Quality:";
+        lblPrintQualityCaption.Location = new Point(380, 28);
+        lblPrintQualityCaption.AutoSize = true;
+
+        cmbPrintQuality.Location = new Point(480, 25);
+        cmbPrintQuality.Size = new Size(170, 25);
+        cmbPrintQuality.DropDownStyle = ComboBoxStyle.DropDownList;
+        cmbPrintQuality.SelectedIndexChanged += ProfileControl_Changed;
+
+        lblColorModeCaption.Text = "Color Mode:";
+        lblColorModeCaption.Location = new Point(15, 63);
+        lblColorModeCaption.AutoSize = true;
+
+        cmbColorMode.Location = new Point(150, 60);
+        cmbColorMode.Size = new Size(200, 25);
+        cmbColorMode.DropDownStyle = ComboBoxStyle.DropDownList;
+        cmbColorMode.SelectedIndexChanged += ProfileControl_Changed;
+
+        lblOrientationCaption.Text = "Orientation:";
+        lblOrientationCaption.Location = new Point(380, 63);
+        lblOrientationCaption.AutoSize = true;
+
+        cmbOrientation.Location = new Point(480, 60);
+        cmbOrientation.Size = new Size(170, 25);
+        cmbOrientation.DropDownStyle = ComboBoxStyle.DropDownList;
+        cmbOrientation.Items.Add("Portrait");
+        cmbOrientation.Items.Add("Landscape");
+        cmbOrientation.SelectedIndexChanged += ProfileControl_Changed;
+
+        chkBorderless.Text = "Borderless";
+        chkBorderless.Location = new Point(150, 98);
+        chkBorderless.AutoSize = true;
+        chkBorderless.CheckedChanged += ProfileControl_Changed;
+
+        lblProfileInfoCaption.Text = "Info:";
+        lblProfileInfoCaption.Location = new Point(15, 135);
+        lblProfileInfoCaption.AutoSize = true;
+
+        lblProfileInfoValue.Text = "-";
+        lblProfileInfoValue.Location = new Point(150, 135);
+        lblProfileInfoValue.AutoSize = true;
+        lblProfileInfoValue.Font = new Font("Segoe UI", 8.5F, FontStyle.Italic);
+        lblProfileInfoValue.ForeColor = Color.DimGray;
+
+        grpPrinterProfile.Controls.Add(lblPaperSizeCaption);
+        grpPrinterProfile.Controls.Add(cmbPaperSize);
+        grpPrinterProfile.Controls.Add(lblPrintQualityCaption);
+        grpPrinterProfile.Controls.Add(cmbPrintQuality);
+        grpPrinterProfile.Controls.Add(lblColorModeCaption);
+        grpPrinterProfile.Controls.Add(cmbColorMode);
+        grpPrinterProfile.Controls.Add(lblOrientationCaption);
+        grpPrinterProfile.Controls.Add(cmbOrientation);
+        grpPrinterProfile.Controls.Add(chkBorderless);
+        grpPrinterProfile.Controls.Add(lblProfileInfoCaption);
+        grpPrinterProfile.Controls.Add(lblProfileInfoValue);
+
         // grpQueue
         grpQueue.Text = "HTTP API && Print Queue";
-        grpQueue.Location = new Point(20, 355);
+        grpQueue.Location = new Point(20, 535);
         grpQueue.Size = new Size(680, 240);
         grpQueue.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
 
@@ -257,7 +354,7 @@ partial class MainForm
 
         // grpLog
         grpLog.Text = "Log";
-        grpLog.Location = new Point(20, 605);
+        grpLog.Location = new Point(20, 785);
         grpLog.Size = new Size(680, 150);
         grpLog.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
 
@@ -273,14 +370,15 @@ partial class MainForm
 
         // MainForm
         AutoScaleMode = AutoScaleMode.Font;
-        ClientSize = new Size(720, 780);
-        MinimumSize = new Size(680, 650);
+        ClientSize = new Size(720, 960);
+        MinimumSize = new Size(680, 830);
         Text = "Photobooth Print Server";
         StartPosition = FormStartPosition.CenterScreen;
 
         Controls.Add(lblTitle);
         Controls.Add(grpServer);
         Controls.Add(grpPrinter);
+        Controls.Add(grpPrinterProfile);
         Controls.Add(grpQueue);
         Controls.Add(grpLog);
     }

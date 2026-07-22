@@ -12,6 +12,7 @@ public class PrintManager
 {
     private readonly PrintQueueService _queue;
     private readonly AppSettingsService _settingsService;
+    private readonly PrinterProfileStore _profileStore;
     private readonly ImagePrintService _imagePrintService = new();
     private readonly SemaphoreSlim _signal = new(0);
 
@@ -27,10 +28,11 @@ public class PrintManager
     /// <summary>Dipicu untuk pesan log.</summary>
     public event Action<string>? LogMessage;
 
-    public PrintManager(PrintQueueService queue, AppSettingsService settingsService)
+    public PrintManager(PrintQueueService queue, AppSettingsService settingsService, PrinterProfileStore profileStore)
     {
         _queue = queue;
         _settingsService = settingsService;
+        _profileStore = profileStore;
         _queue.QueueChanged += () => _signal.Release();
     }
 
@@ -80,9 +82,10 @@ public class PrintManager
         try
         {
             AppSettings settings = _settingsService.Load();
+            PrinterProfile profile = _profileStore.GetOrCreate(settings.SelectedPrinter);
 
             await Task.Run(() =>
-                _imagePrintService.PrintImage(settings.SelectedPrinter, job.FilePath, job.Copies));
+                _imagePrintService.PrintImage(settings.SelectedPrinter, job.FilePath, job.Copies, profile));
 
             job.Status = PrintJobStatus.Completed;
             job.CompletedAt = DateTime.Now;

@@ -10,6 +10,7 @@ public partial class MainForm : Form
     private readonly PrinterService _printerService = new();
     private readonly TestPrintService _testPrintService = new();
     private readonly AppSettingsService _settingsService = new();
+    private readonly PrinterProfileStore _profileStore = new();
 
     private readonly PrintQueueService _printQueue = new();
     private readonly PrintManager _printManager;
@@ -17,12 +18,14 @@ public partial class MainForm : Form
 
     private AppSettings _settings = new();
     private List<PrinterInfo> _printers = new();
+    private PrinterCapabilities _currentCapabilities = new();
+    private bool _suppressProfileEvents;
 
     public MainForm()
     {
         InitializeComponent();
 
-        _printManager = new PrintManager(_printQueue, _settingsService);
+        _printManager = new PrintManager(_printQueue, _settingsService, _profileStore);
         _webServer = new WebServerService(_printQueue, _settingsService);
 
         Load += MainForm_Load;
@@ -194,6 +197,8 @@ public partial class MainForm : Form
             lblPrinterStatusValue.Text = "No printer selected";
             lblPrinterStatusValue.ForeColor = Color.Gray;
             btnTestPrint.Enabled = false;
+
+            ClearProfileUi();
             return;
         }
 
@@ -202,6 +207,142 @@ public partial class MainForm : Form
         lblPrinterStatusValue.ForeColor = printer.IsReady ? Color.DarkGreen : Color.DarkOrange;
 
         btnTestPrint.Enabled = true;
+
+        LoadPrinterProfileUi(printer.Name);
+    }
+
+    // ===================== Printer Profile (Fase 3 - STEP 1) =====================
+
+    private void ClearProfileUi()
+    {
+        _suppressProfileEvents = true;
+        try
+        {
+            cmbPaperSize.Items.Clear();
+            cmbPaperSize.Enabled = false;
+
+            cmbPrintQuality.Items.Clear();
+            cmbPrintQuality.Enabled = false;
+
+            cmbColorMode.Items.Clear();
+            cmbColorMode.Enabled = false;
+
+            cmbOrientation.SelectedIndex = -1;
+            cmbOrientation.Enabled = false;
+
+            chkBorderless.Checked = false;
+            chkBorderless.Enabled = false;
+
+            lblProfileInfoValue.Text = "-";
+        }
+        finally
+        {
+            _suppressProfileEvents = false;
+        }
+    }
+
+    /// <summary>
+    /// Memuat kapabilitas asli printer (dari driver Windows) dan Printer Profile
+    /// tersimpan untuk printer tersebut, lalu menampilkannya di panel Printer Profile.
+    /// Dipanggil setiap kali printer aktif berganti - konfigurasi printer sebelumnya
+    /// tidak hilang, hanya tidak sedang ditampilkan.
+    /// </summary>
+    private void LoadPrinterProfileUi(string printerName)
+    {
+        _suppressProfileEvents = true;
+        try
+        {
+            _currentCapabilities = _printerService.GetCapabilities(printerName);
+            var profile = _profileStore.GetOrCreate(printerName);
+            profile.PrinterName = printerName;
+
+            // --- Paper Size: hanya opsi yang benar-benar dilaporkan driver ---
+            cmbPaperSize.Items.Clear();
+            foreach (var size in _currentCapabilities.PaperSizes)
+                cmbPaperSize.Items.Add(size);
+
+            cmbPaperSize.Enabled = cmbPaperSize.Items.Count > 0;
+            if (cmbPaperSize.Items.Count > 0)
+            {
+                int idx = string.IsNullOrEmpty(profile.PaperSizeName)
+                    ? -1
+                    : cmbPaperSize.Items.IndexOf(profile.PaperSizeName);
+                cmbPaperSize.SelectedIndex = idx >= 0 ? idx : 0;
+                profile.PaperSizeName = cmbPaperSize.SelectedItem?.ToString() ?? string.Empty;
+            }
+
+            // --- Print Quality: hanya level yang benar-benar tersedia di driver ---
+            cmbPrintQuality.Items.Clear();
+            var availableLevels = _currentCapabilities.QualityOptions
+                .Select(q => q.Level)
+                .Distinct()
+                .ToList();
+
+            if (availableLevels.Count == 0)
+                availableLevels.Add(PrintQualityLevel.High); // fallback minimal, driver tidak melaporkan apa pun
+
+            foreach (var level in availableLevels)
+                cmbPrintQuality.Items.Add(level);
+
+            cmbPrintQuality.Enabled = true;
+            int qIdx = cmbPrintQuality.Items.IndexOf(profile.PrintQuality);
+            cmbPrintQuality.SelectedIndex = qIdx >= 0 ? qIdx : 0;
+            profile.PrintQuality = (PrintQualityLevel)cmbPrintQuality.SelectedItem!;
+
+            // --- Color Mode: opsi Monochrome hanya muncul jika printer mendukung warna ---
+            // (printer color bisa tetap dipakai mode Monochrome; printer B/W murni cuma punya 1 opsi)
+            cmbColorMode.Items.Clear();
+            cmbColorMode.Items.Add("Color");
+            if (_currentCapabilities.SupportsColor)
+                cmbColorMode.Items.Add("Monochrome");
+
+            cmbColorMode.Enabled = _currentCapabilities.SupportsColor;
+            int cIdx = profile.ColorMode ? 0 : cmbColorMode.Items.IndexOf("Monochrome");
+            cmbColorMode.SelectedIndex = cIdx >= 0 ? cIdx : 0;
+            profile.ColorMode = cmbColorMode.SelectedIndex == 0;
+
+            // --- Orientation ---
+            cmbOrientation.Enabled = true;
+            cmbOrientation.SelectedIndex = profile.Landscape ? 1 : 0;
+
+            // --- Borderless ---
+            chkBorderless.Enabled = true;
+            chkBorderless.Checked = profile.Borderless;
+
+            lblProfileInfoValue.Text =
+                $"{_currentCapabilities.PaperSizes.Count} paper size terdeteksi  |  " +
+                (_currentCapabilities.SupportsColor ? "Color printer" : "Monochrome printer");
+
+            _profileStore.Save(profile);
+        }
+        finally
+        {
+            _suppressProfileEvents = false;
+        }
+    }
+
+    private void ProfileControl_Changed(object? sender, EventArgs e)
+    {
+        if (_suppressProfileEvents) return;
+        if (cmbPrinters.SelectedIndex < 0 || cmbPrinters.SelectedIndex >= _printers.Count) return;
+
+        var printerName = _printers[cmbPrinters.SelectedIndex].Name;
+
+        var profile = _profileStore.GetOrCreate(printerName);
+        profile.PrinterName = printerName;
+        profile.PaperSizeName = cmbPaperSize.SelectedItem?.ToString() ?? string.Empty;
+        profile.PrintQuality = cmbPrintQuality.SelectedItem is PrintQualityLevel level ? level : PrintQualityLevel.High;
+        profile.ColorMode = cmbColorMode.SelectedIndex <= 0; // index 0 = "Color"
+        profile.Landscape = cmbOrientation.SelectedIndex == 1; // index 1 = "Landscape"
+        profile.Borderless = chkBorderless.Checked;
+
+        _profileStore.Save(profile);
+
+        AppendLog($"Printer Profile '{printerName}' disimpan " +
+                   $"(Paper: {profile.PaperSizeName}, Quality: {profile.PrintQuality}, " +
+                   $"Color: {(profile.ColorMode ? "Color" : "Monochrome")}, " +
+                   $"Orientation: {(profile.Landscape ? "Landscape" : "Portrait")}, " +
+                   $"Borderless: {profile.Borderless}).");
     }
 
     private async void btnTestPrint_Click(object? sender, EventArgs e)

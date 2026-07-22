@@ -75,6 +75,97 @@ public class PrinterService
             .ToList();
     }
 
+    /// <summary>
+    /// Query kemampuan asli sebuah printer (Paper Size, dukungan warna, resolusi/kualitas)
+    /// langsung dari driver Windows. Dipakai Fase 3 agar Printer Profile hanya menawarkan
+    /// opsi yang benar-benar didukung printer tersebut, bukan opsi yang diasumsikan.
+    /// </summary>
+    public PrinterCapabilities GetCapabilities(string printerName)
+    {
+        var caps = new PrinterCapabilities();
+
+        if (string.IsNullOrWhiteSpace(printerName)) return caps;
+
+        try
+        {
+            var settings = new PrinterSettings { PrinterName = printerName };
+            if (!settings.IsValid) return caps;
+
+            caps.SupportsColor = settings.SupportsColor;
+
+            foreach (PaperSize size in settings.PaperSizes)
+            {
+                if (!string.IsNullOrWhiteSpace(size.PaperName))
+                    caps.PaperSizes.Add(size.PaperName);
+            }
+
+            var resolutions = settings.PrinterResolutions.Cast<PrinterResolution>().ToList();
+
+            var seenLevels = new HashSet<PrintQualityLevel>();
+            foreach (var res in resolutions)
+            {
+                PrintQualityLevel? level = res.Kind switch
+                {
+                    PrinterResolutionKind.High => PrintQualityLevel.High,
+                    PrinterResolutionKind.Medium => PrintQualityLevel.Normal,
+                    PrinterResolutionKind.Draft => PrintQualityLevel.Draft,
+                    PrinterResolutionKind.Low => PrintQualityLevel.Draft,
+                    _ => null
+                };
+
+                if (level == null || !seenLevels.Add(level.Value)) continue;
+
+                caps.QualityOptions.Add(new PrinterQualityOption
+                {
+                    Level = level.Value,
+                    ResolutionName = res.Kind == PrinterResolutionKind.Custom
+                        ? $"{res.X}x{res.Y} dpi"
+                        : res.Kind.ToString()
+                });
+            }
+
+            // Sebagian driver (terutama printer foto seperti DNP) tidak melaporkan Kind
+            // standar dan hanya mengekspos daftar DPI custom. Fallback: petakan berdasarkan
+            // urutan DPI tertinggi -> High, tengah -> Normal, terendah -> Draft.
+            if (caps.QualityOptions.Count == 0 && resolutions.Count > 0)
+            {
+                var byDpi = resolutions.OrderByDescending(r => r.X).ToList();
+
+                caps.QualityOptions.Add(new PrinterQualityOption
+                {
+                    Level = PrintQualityLevel.High,
+                    ResolutionName = $"{byDpi.First().X}x{byDpi.First().Y} dpi"
+                });
+
+                if (byDpi.Count >= 3)
+                {
+                    var mid = byDpi[byDpi.Count / 2];
+                    caps.QualityOptions.Add(new PrinterQualityOption
+                    {
+                        Level = PrintQualityLevel.Normal,
+                        ResolutionName = $"{mid.X}x{mid.Y} dpi"
+                    });
+                }
+
+                if (byDpi.Count >= 2)
+                {
+                    caps.QualityOptions.Add(new PrinterQualityOption
+                    {
+                        Level = PrintQualityLevel.Draft,
+                        ResolutionName = $"{byDpi.Last().X}x{byDpi.Last().Y} dpi"
+                    });
+                }
+            }
+        }
+        catch
+        {
+            // Query kapabilitas gagal (mis. driver bermasalah) - kembalikan apa adanya
+            // agar UI tetap bisa jalan tanpa crash, dengan opsi seadanya.
+        }
+
+        return caps;
+    }
+
     private Dictionary<string, PrinterWmiData> QueryWmiPrinters()
     {
         var data = new Dictionary<string, PrinterWmiData>();
