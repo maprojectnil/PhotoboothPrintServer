@@ -13,6 +13,8 @@ public class PrintManager
     private readonly PrintQueueService _queue;
     private readonly AppSettingsService _settingsService;
     private readonly PrinterProfileStore _profileStore;
+    private readonly PrintHistoryStore _historyStore;
+    private readonly PrinterService _printerService;
     private readonly ImagePrintService _imagePrintService = new();
     private readonly SemaphoreSlim _signal = new(0);
 
@@ -28,11 +30,18 @@ public class PrintManager
     /// <summary>Dipicu untuk pesan log.</summary>
     public event Action<string>? LogMessage;
 
-    public PrintManager(PrintQueueService queue, AppSettingsService settingsService, PrinterProfileStore profileStore)
+    public PrintManager(
+        PrintQueueService queue,
+        AppSettingsService settingsService,
+        PrinterProfileStore profileStore,
+        PrintHistoryStore historyStore,
+        PrinterService printerService)
     {
         _queue = queue;
         _settingsService = settingsService;
         _profileStore = profileStore;
+        _historyStore = historyStore;
+        _printerService = printerService;
         _queue.QueueChanged += () => _signal.Release();
     }
 
@@ -63,11 +72,73 @@ public class PrintManager
                 break;
             }
 
-            while (!token.IsCancellationRequested && _queue.TryDequeue(out var job) && job != null)
+            while (!token.IsCancellationRequested)
             {
+                // Auto Reconnect (Fase 3 - STEP 6): jangan dequeue job jika printer aktif
+                // sedang offline/tidak terhubung - job tetap aman menunggu di antrean sampai
+                // printer tersambung kembali, bukan langsung digagalkan.
+                bool printerReady = await WaitForPrinterOnlineAsync(token);
+                if (!printerReady) break; // token dibatalkan saat menunggu (app shutdown)
+
+                if (!_queue.TryDequeue(out var job) || job == null) break;
+
                 await ProcessJobAsync(job);
             }
         }
+    }
+
+    /// <summary>
+    /// Menunggu sampai printer aktif online/terhubung, mengecek berkala tanpa membebani CPU.
+    /// Mengembalikan false hanya jika dibatalkan (mis. aplikasi sedang shutdown).
+    /// </summary>
+    private async Task<bool> WaitForPrinterOnlineAsync(CancellationToken token)
+    {
+        bool waitingLogged = false;
+
+        while (!token.IsCancellationRequested)
+        {
+            AppSettings settings = _settingsService.Load();
+
+            if (string.IsNullOrWhiteSpace(settings.SelectedPrinter))
+            {
+                if (!waitingLogged)
+                {
+                    LogMessage?.Invoke("Belum ada printer aktif dipilih. Print Job menunggu dengan aman di antrean...");
+                    waitingLogged = true;
+                }
+            }
+            else
+            {
+                PrinterInfo? info = _printerService.GetPrinterStatus(settings.SelectedPrinter);
+
+                if (info != null && info.IsOnline)
+                {
+                    if (waitingLogged)
+                        LogMessage?.Invoke($"Printer '{settings.SelectedPrinter}' sudah online kembali. Melanjutkan Print Queue.");
+
+                    return true;
+                }
+
+                if (!waitingLogged)
+                {
+                    LogMessage?.Invoke(
+                        $"Printer '{settings.SelectedPrinter}' offline / tidak terhubung. " +
+                        "Print Job tetap aman di antrean, menunggu printer tersambung kembali...");
+                    waitingLogged = true;
+                }
+            }
+
+            try
+            {
+                await Task.Delay(TimeSpan.FromSeconds(3), token);
+            }
+            catch (OperationCanceledException)
+            {
+                return false;
+            }
+        }
+
+        return false;
     }
 
     private async Task ProcessJobAsync(PrintJob job)
@@ -80,11 +151,11 @@ public class PrintManager
         StateChanged?.Invoke();
         _queue.NotifyStatusChanged(job);
 
+        AppSettings settings = _settingsService.Load();
+        PrinterProfile profile = _profileStore.GetOrCreate(settings.SelectedPrinter);
+
         try
         {
-            AppSettings settings = _settingsService.Load();
-            PrinterProfile profile = _profileStore.GetOrCreate(settings.SelectedPrinter);
-
             await Task.Run(() =>
                 _imagePrintService.PrintImage(settings.SelectedPrinter, job.FilePath, job.Copies, profile));
 
@@ -109,9 +180,46 @@ public class PrintManager
         }
         finally
         {
+            SaveHistoryEntry(job, settings.SelectedPrinter, profile);
             CurrentJob = null;
             StateChanged?.Invoke();
         }
+    }
+
+    private void SaveHistoryEntry(PrintJob job, string printerName, PrinterProfile profile)
+    {
+        try
+        {
+            var entry = new PrintHistoryEntry
+            {
+                JobId = job.JobId,
+                FileName = job.FileName,
+                Copies = job.Copies,
+                PrinterName = string.IsNullOrWhiteSpace(printerName) ? "(tidak ada)" : printerName,
+                ProfileSummary = BuildProfileSummary(profile),
+                Status = job.Status,
+                CreatedAt = job.CreatedAt,
+                StartedAt = job.StartedAt,
+                CompletedAt = job.CompletedAt,
+                ErrorMessage = job.ErrorMessage
+            };
+
+            _historyStore.Add(entry);
+        }
+        catch
+        {
+            // Kegagalan mencatat history tidak boleh mengganggu proses print yang sudah selesai.
+        }
+    }
+
+    private static string BuildProfileSummary(PrinterProfile profile)
+    {
+        string paper = string.IsNullOrWhiteSpace(profile.PaperSizeName) ? "-" : profile.PaperSizeName;
+        string color = profile.ColorMode ? "Color" : "Monochrome";
+        string orientation = profile.Landscape ? "Landscape" : "Portrait";
+        string borderless = profile.Borderless ? ", Borderless" : "";
+
+        return $"{paper} | {profile.PrintQuality} | {color} | {orientation}{borderless}";
     }
 
     private static void TryDeleteTempFile(string path)

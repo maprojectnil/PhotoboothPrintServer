@@ -166,6 +166,26 @@ public class PrinterService
         return caps;
     }
 
+    /// <summary>
+    /// Cek status satu printer tertentu (dipakai polling Auto Reconnect - Fase 3 STEP 6).
+    /// Reuse GetInstalledPrinters() supaya sumber data konsisten dengan daftar printer di UI.
+    /// </summary>
+    public PrinterInfo? GetPrinterStatus(string printerName)
+    {
+        if (string.IsNullOrWhiteSpace(printerName)) return null;
+
+        try
+        {
+            return GetInstalledPrinters().FirstOrDefault(p => p.Name == printerName);
+        }
+        catch
+        {
+            // Kegagalan cek status (mis. WMI sementara tidak bisa diakses) tidak boleh crash -
+            // caller akan mencoba lagi di siklus polling berikutnya.
+            return null;
+        }
+    }
+
     private Dictionary<string, PrinterWmiData> QueryWmiPrinters()
     {
         var data = new Dictionary<string, PrinterWmiData>();

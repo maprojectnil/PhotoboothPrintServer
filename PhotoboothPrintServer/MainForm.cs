@@ -11,26 +11,33 @@ public partial class MainForm : Form
     private readonly TestPrintService _testPrintService = new();
     private readonly AppSettingsService _settingsService = new();
     private readonly PrinterProfileStore _profileStore = new();
+    private readonly PrintHistoryStore _historyStore = new();
 
     private readonly PrintQueueService _printQueue = new();
     private readonly PrintManager _printManager;
     private readonly WebServerService _webServer;
     private readonly MdnsService _mdnsService = new();
     private readonly WebSocketBroadcastService _wsBroadcast = new();
+    private readonly PrinterWatcherService _printerWatcher;
+    private readonly NetworkWatcherService _networkWatcher = new();
 
     private AppSettings _settings = new();
     private List<PrinterInfo> _printers = new();
     private PrinterCapabilities _currentCapabilities = new();
     private bool _suppressProfileEvents;
+    private bool _isExiting;
+    private Color? _lastTrayColor;
 
     public MainForm()
     {
         InitializeComponent();
 
-        _printManager = new PrintManager(_printQueue, _settingsService, _profileStore);
+        _printManager = new PrintManager(_printQueue, _settingsService, _profileStore, _historyStore, _printerService);
         _webServer = new WebServerService(_printQueue, _settingsService, _wsBroadcast);
+        _printerWatcher = new PrinterWatcherService(_printerService, _settingsService);
 
         Load += MainForm_Load;
+        Resize += MainForm_Resize;
     }
 
     private async void MainForm_Load(object? sender, EventArgs e)
@@ -51,20 +58,47 @@ public partial class MainForm : Form
         _mdnsService.LogMessage += AppendLog;
         _wsBroadcast.LogMessage += AppendLog;
         _printQueue.JobStatusChanged += job => _ = _wsBroadcast.BroadcastJobStatusAsync(job);
+        _historyStore.EntryAdded += HistoryStore_EntryAdded;
+        _historyStore.HistoryCleared += HistoryStore_HistoryCleared;
+        _printerWatcher.StatusPolled += PrinterWatcher_StatusPolled;
+        _printerWatcher.StatusChanged += PrinterWatcher_StatusChanged;
+        _networkWatcher.NetworkChanged += NetworkWatcher_NetworkChanged;
 
         _printManager.Start();
+        _printerWatcher.Start();
+        _networkWatcher.Start();
 
         RefreshPrinterList();
         RefreshQueueUi();
+        LoadHistoryUi();
+        UpdateTrayStatus();
 
         await StartServerAsync();
     }
 
     protected override void OnFormClosing(FormClosingEventArgs e)
     {
+        // Klik tombol X (atau Alt+F4) hanya menyembunyikan ke System Tray - Print Server,
+        // HTTP API, dan Print Queue tetap berjalan di background. Shutdown sungguhan hanya
+        // terjadi lewat menu "Exit" di tray (yang set _isExiting = true sebelum Close()),
+        // atau alasan lain di luar kendali user (Windows shutdown/log off, Task Manager, dst).
+        if (!_isExiting && e.CloseReason == CloseReason.UserClosing)
+        {
+            e.Cancel = true;
+            Hide();
+            trayIcon.ShowBalloonTip(
+                1500,
+                "Photobooth Print Server",
+                "Aplikasi tetap berjalan di background. Klik kanan ikon tray untuk Exit.",
+                ToolTipIcon.Info);
+            return;
+        }
+
         try
         {
             _printManager.Stop();
+            _printerWatcher.Stop();
+            _networkWatcher.Stop();
             _mdnsService.Stop();
             _webServer.StopAsync().GetAwaiter().GetResult();
         }
@@ -73,7 +107,210 @@ public partial class MainForm : Form
             // Diabaikan saat aplikasi ditutup.
         }
 
+        trayIcon.Visible = false;
+        trayIcon.Dispose();
+
         base.OnFormClosing(e);
+    }
+
+    private void MainForm_Resize(object? sender, EventArgs e)
+    {
+        // Minimize juga disembunyikan ke tray (bukan cuma di-minimize di taskbar),
+        // supaya konsisten dengan perilaku "tetap berjalan di background" saat X ditekan.
+        if (WindowState == FormWindowState.Minimized)
+        {
+            Hide();
+            trayIcon.ShowBalloonTip(
+                1500,
+                "Photobooth Print Server",
+                "Aplikasi tetap berjalan di background.",
+                ToolTipIcon.Info);
+        }
+    }
+
+    // ===================== System Tray (Fase 3 - STEP 5) =====================
+
+    private void ShowMainWindow()
+    {
+        Show();
+        WindowState = FormWindowState.Normal;
+        Activate();
+    }
+
+    private void trayIcon_DoubleClick(object? sender, EventArgs e) => ShowMainWindow();
+
+    private void trayMenuOpen_Click(object? sender, EventArgs e) => ShowMainWindow();
+
+    private async void trayMenuStartServer_Click(object? sender, EventArgs e)
+    {
+        if (!_webServer.IsRunning) await StartServerAsync();
+    }
+
+    private async void trayMenuStopServer_Click(object? sender, EventArgs e)
+    {
+        if (_webServer.IsRunning) await StopServerAsync();
+    }
+
+    private void trayMenuRefreshPrinter_Click(object? sender, EventArgs e) => RefreshPrinterList();
+
+    private void trayMenuExit_Click(object? sender, EventArgs e)
+    {
+        var confirm = MessageBox.Show(
+            "Keluar dari Photobooth Print Server? HTTP API dan Print Queue akan berhenti.",
+            "Konfirmasi Exit",
+            MessageBoxButtons.YesNo,
+            MessageBoxIcon.Warning);
+
+        if (confirm != DialogResult.Yes) return;
+
+        _isExiting = true;
+        Close();
+    }
+
+    /// <summary>
+    /// Update tooltip dan warna ikon tray sesuai status server & printer saat ini.
+    /// Dipanggil setiap ada perubahan status server, printer, atau antrean.
+    /// </summary>
+    private void UpdateTrayStatus()
+    {
+        bool serverRunning = _webServer.IsRunning;
+
+        PrinterInfo? selectedPrinter =
+            cmbPrinters.SelectedIndex >= 0 && cmbPrinters.SelectedIndex < _printers.Count
+                ? _printers[cmbPrinters.SelectedIndex]
+                : null;
+
+        Color statusColor;
+        string statusText;
+
+        if (!serverRunning)
+        {
+            statusColor = Color.Gray;
+            statusText = "Server: Stopped";
+        }
+        else if (selectedPrinter == null)
+        {
+            statusColor = Color.Orange;
+            statusText = "Server: Running | Printer: (belum dipilih)";
+        }
+        else if (!selectedPrinter.IsReady)
+        {
+            statusColor = Color.Orange;
+            statusText = "Server: Running | Printer: Offline";
+        }
+        else
+        {
+            statusColor = Color.Green;
+            statusText = "Server: Running | Printer: Ready";
+        }
+
+        string tooltip = $"{statusText} | Queue: {_printQueue.PendingCount}";
+        if (tooltip.Length > 63) tooltip = tooltip[..60] + "..."; // batas Windows untuk NotifyIcon.Text
+
+        trayIcon.Text = tooltip;
+
+        if (_lastTrayColor != statusColor)
+        {
+            trayIcon.Icon = TrayIconFactory.CreateStatusIcon(statusColor);
+            _lastTrayColor = statusColor;
+        }
+
+        trayMenuStartServer.Enabled = !serverRunning;
+        trayMenuStopServer.Enabled = serverRunning;
+    }
+
+    // ===================== Auto Reconnect & Auto Recovery (Fase 3 - STEP 6) =====================
+
+    /// <summary>
+    /// Dipanggil setiap siklus poll PrinterWatcherService (~5 detik sekali). Update label status
+    /// printer + tray HANYA untuk printer yang sedang aktif dipilih, tanpa mengubah pilihan combo
+    /// user maupun me-reset daftar printer (supaya tidak mengganggu interaksi user).
+    /// </summary>
+    private void PrinterWatcher_StatusPolled(PrinterInfo? info)
+    {
+        if (InvokeRequired)
+        {
+            Invoke(new Action(() => PrinterWatcher_StatusPolled(info)));
+            return;
+        }
+
+        if (info == null)
+        {
+            UpdateTrayStatus();
+            return;
+        }
+
+        // Update entri di _printers secara in-place supaya index/selection combo tidak berubah.
+        var existing = _printers.FirstOrDefault(p => p.Name == info.Name);
+        if (existing != null)
+        {
+            existing.IsOnline = info.IsOnline;
+            existing.IsReady = info.IsReady;
+            existing.StatusText = info.StatusText;
+
+            bool isCurrentlySelected =
+                cmbPrinters.SelectedIndex >= 0 &&
+                cmbPrinters.SelectedIndex < _printers.Count &&
+                _printers[cmbPrinters.SelectedIndex].Name == info.Name;
+
+            if (isCurrentlySelected)
+            {
+                string kind = existing.IsVirtual ? "Virtual" : "Physical";
+                lblPrinterStatusValue.Text =
+                    $"{existing.StatusText}  |  {kind}  |  {(existing.IsOnline ? "Online" : "Offline")}";
+                lblPrinterStatusValue.ForeColor = existing.IsReady ? Color.DarkGreen : Color.DarkOrange;
+            }
+        }
+
+        UpdateTrayStatus();
+    }
+
+    /// <summary>Dipicu hanya saat status online/offline printer benar-benar berubah - dicatat ke log.</summary>
+    private void PrinterWatcher_StatusChanged(PrinterInfo info)
+    {
+        string message = info.IsOnline
+            ? $"Printer '{info.Name}' tersambung kembali (online)."
+            : $"Printer '{info.Name}' terputus / offline. Print Job baru akan menunggu di antrean.";
+
+        AppendLog(message);
+    }
+
+    /// <summary>
+    /// Dipicu saat IP lokal berubah (mis. Wi-Fi sempat putus lalu reconnect dengan IP baru dari DHCP).
+    /// mDNS di-restart dengan info terbaru supaya Android tetap bisa auto-discover, dan label IP
+    /// di UI diperbarui - semua tanpa perlu restart aplikasi maupun HTTP API.
+    /// </summary>
+    private void NetworkWatcher_NetworkChanged(string newIp)
+    {
+        if (InvokeRequired)
+        {
+            Invoke(new Action(() => NetworkWatcher_NetworkChanged(newIp)));
+            return;
+        }
+
+        AppendLog($"Alamat IP jaringan berubah menjadi {newIp}. Memperbarui mDNS...");
+
+        lblIpValue.Text = newIp;
+        lblApiUrlValue.Text = $"http://{newIp}:{_settings.ApiPort}";
+
+        if (_webServer.IsRunning)
+        {
+            _mdnsService.Stop();
+            _mdnsService.Start(_settings.ApiPort, $"PhotoboothPrintServer-{Environment.MachineName}");
+
+            if (_mdnsService.IsRunning)
+            {
+                lblMdnsValue.Text = $"Advertising ({_mdnsService.InstanceName})";
+                lblMdnsValue.ForeColor = Color.DarkGreen;
+            }
+            else
+            {
+                lblMdnsValue.Text = "Gagal - gunakan input IP manual";
+                lblMdnsValue.ForeColor = Color.DarkOrange;
+            }
+        }
+
+        UpdateTrayStatus();
     }
 
     // ===================== Server (HTTP API) =====================
@@ -115,6 +352,7 @@ public partial class MainForm : Form
         }
 
         btnToggleServer.Enabled = true;
+        UpdateTrayStatus();
     }
 
     private async Task StopServerAsync()
@@ -134,6 +372,7 @@ public partial class MainForm : Form
         AppendLog("HTTP API dihentikan.");
 
         btnToggleServer.Enabled = true;
+        UpdateTrayStatus();
     }
 
     private async void btnToggleServer_Click(object? sender, EventArgs e)
@@ -225,6 +464,7 @@ public partial class MainForm : Form
             btnTestPrint.Enabled = false;
 
             ClearProfileUi();
+            UpdateTrayStatus();
             return;
         }
 
@@ -235,6 +475,7 @@ public partial class MainForm : Form
         btnTestPrint.Enabled = true;
 
         LoadPrinterProfileUi(printer.Name);
+        UpdateTrayStatus();
     }
 
     // ===================== Printer Profile (Fase 3 - STEP 1) =====================
@@ -427,6 +668,80 @@ public partial class MainForm : Form
         }
 
         lvQueue.EndUpdate();
+
+        UpdateTrayStatus();
+    }
+
+    // ===================== Print History (Fase 3 - STEP 4) =====================
+
+    private void LoadHistoryUi()
+    {
+        var entries = _historyStore.LoadAll();
+
+        lvHistory.BeginUpdate();
+        lvHistory.Items.Clear();
+
+        // Terbaru di atas supaya operator langsung melihat hasil print terakhir.
+        foreach (var entry in entries.OrderByDescending(e => e.CreatedAt))
+        {
+            lvHistory.Items.Add(BuildHistoryRow(entry));
+        }
+
+        lvHistory.EndUpdate();
+    }
+
+    private void HistoryStore_EntryAdded(PrintHistoryEntry entry)
+    {
+        if (InvokeRequired)
+        {
+            Invoke(new Action(() => HistoryStore_EntryAdded(entry)));
+            return;
+        }
+
+        // Entri baru selalu ditaruh paling atas (paling baru).
+        lvHistory.Items.Insert(0, BuildHistoryRow(entry));
+    }
+
+    private void HistoryStore_HistoryCleared()
+    {
+        if (InvokeRequired)
+        {
+            Invoke(new Action(HistoryStore_HistoryCleared));
+            return;
+        }
+
+        lvHistory.Items.Clear();
+    }
+
+    private static ListViewItem BuildHistoryRow(PrintHistoryEntry entry)
+    {
+        var item = new ListViewItem(entry.JobId);
+        item.SubItems.Add(entry.FileName);
+        item.SubItems.Add(entry.Copies.ToString());
+        item.SubItems.Add(entry.PrinterName);
+        item.SubItems.Add(entry.ProfileSummary);
+        item.SubItems.Add(entry.Status.ToString());
+        item.SubItems.Add(entry.CreatedAt.ToString("yyyy-MM-dd HH:mm:ss"));
+        item.SubItems.Add(entry.CompletedAt?.ToString("yyyy-MM-dd HH:mm:ss") ?? "-");
+        item.SubItems.Add(entry.ErrorMessage ?? string.Empty);
+
+        item.ForeColor = entry.Status == PrintJobStatus.Failed ? Color.DarkRed : Color.Black;
+
+        return item;
+    }
+
+    private void btnClearHistory_Click(object? sender, EventArgs e)
+    {
+        var confirm = MessageBox.Show(
+            "Hapus semua riwayat print? Tindakan ini tidak bisa dibatalkan.",
+            "Konfirmasi Clear History",
+            MessageBoxButtons.YesNo,
+            MessageBoxIcon.Warning);
+
+        if (confirm != DialogResult.Yes) return;
+
+        _historyStore.Clear();
+        AppendLog("Print History dibersihkan oleh operator.");
     }
 
     // ===================== Logging =====================

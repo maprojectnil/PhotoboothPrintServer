@@ -60,8 +60,20 @@ partial class MainForm
     private Label lblTotalFailedValue = null!;
     private ListView lvQueue = null!;
 
+    private GroupBox grpHistory = null!;
+    private Button btnClearHistory = null!;
+    private ListView lvHistory = null!;
+
     private GroupBox grpLog = null!;
     private TextBox txtLog = null!;
+
+    private NotifyIcon trayIcon = null!;
+    private ContextMenuStrip trayMenu = null!;
+    private ToolStripMenuItem trayMenuOpen = null!;
+    private ToolStripMenuItem trayMenuStartServer = null!;
+    private ToolStripMenuItem trayMenuStopServer = null!;
+    private ToolStripMenuItem trayMenuRefreshPrinter = null!;
+    private ToolStripMenuItem trayMenuExit = null!;
 
     private void InitializeComponent()
     {
@@ -112,8 +124,20 @@ partial class MainForm
         lblTotalFailedValue = new Label();
         lvQueue = new ListView();
 
+        grpHistory = new GroupBox();
+        btnClearHistory = new Button();
+        lvHistory = new ListView();
+
         grpLog = new GroupBox();
         txtLog = new TextBox();
+
+        trayIcon = new NotifyIcon();
+        trayMenu = new ContextMenuStrip();
+        trayMenuOpen = new ToolStripMenuItem();
+        trayMenuStartServer = new ToolStripMenuItem();
+        trayMenuStopServer = new ToolStripMenuItem();
+        trayMenuRefreshPrinter = new ToolStripMenuItem();
+        trayMenuExit = new ToolStripMenuItem();
 
         // lblTitle
         lblTitle.Text = "Photobooth Print Server";
@@ -367,26 +391,90 @@ partial class MainForm
         grpQueue.Controls.Add(lblTotalFailedValue);
         grpQueue.Controls.Add(lvQueue);
 
+        // grpHistory
+        grpHistory.Text = "Print History";
+        grpHistory.Location = new Point(20, 810);
+        grpHistory.Size = new Size(680, 230);
+        grpHistory.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
+
+        btnClearHistory.Text = "Clear History";
+        btnClearHistory.Location = new Point(515, 24);
+        btnClearHistory.Size = new Size(140, 28);
+        btnClearHistory.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+        btnClearHistory.Click += btnClearHistory_Click;
+
+        lvHistory.Location = new Point(15, 60);
+        lvHistory.Size = new Size(650, 160);
+        lvHistory.View = View.Details;
+        lvHistory.FullRowSelect = true;
+        lvHistory.GridLines = true;
+        lvHistory.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
+        lvHistory.Columns.Add("Job ID", 80);
+        lvHistory.Columns.Add("File", 150);
+        lvHistory.Columns.Add("Copies", 60);
+        lvHistory.Columns.Add("Printer", 120);
+        lvHistory.Columns.Add("Profile", 170);
+        lvHistory.Columns.Add("Status", 80);
+        lvHistory.Columns.Add("Created At", 130);
+        lvHistory.Columns.Add("Completed At", 130);
+        lvHistory.Columns.Add("Error", 150);
+
+        grpHistory.Controls.Add(btnClearHistory);
+        grpHistory.Controls.Add(lvHistory);
+
         // grpLog
         grpLog.Text = "Log";
-        grpLog.Location = new Point(20, 810);
+        grpLog.Location = new Point(20, 1050);
         grpLog.Size = new Size(680, 150);
-        grpLog.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
+        grpLog.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
 
         txtLog.Location = new Point(15, 25);
         txtLog.Size = new Size(650, 110);
         txtLog.Multiline = true;
         txtLog.ScrollBars = ScrollBars.Vertical;
         txtLog.ReadOnly = true;
-        txtLog.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
+        txtLog.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
         txtLog.Font = new Font("Consolas", 9);
 
         grpLog.Controls.Add(txtLog);
 
+        // trayMenu
+        trayMenuOpen.Text = "Open";
+        trayMenuOpen.Click += trayMenuOpen_Click;
+
+        trayMenuStartServer.Text = "Start Server";
+        trayMenuStartServer.Click += trayMenuStartServer_Click;
+
+        trayMenuStopServer.Text = "Stop Server";
+        trayMenuStopServer.Click += trayMenuStopServer_Click;
+
+        trayMenuRefreshPrinter.Text = "Refresh Printer";
+        trayMenuRefreshPrinter.Click += trayMenuRefreshPrinter_Click;
+
+        trayMenuExit.Text = "Exit";
+        trayMenuExit.Click += trayMenuExit_Click;
+
+        trayMenu.Items.Add(trayMenuOpen);
+        trayMenu.Items.Add(new ToolStripSeparator());
+        trayMenu.Items.Add(trayMenuStartServer);
+        trayMenu.Items.Add(trayMenuStopServer);
+        trayMenu.Items.Add(new ToolStripSeparator());
+        trayMenu.Items.Add(trayMenuRefreshPrinter);
+        trayMenu.Items.Add(new ToolStripSeparator());
+        trayMenu.Items.Add(trayMenuExit);
+
+        // trayIcon
+        trayIcon.Text = "Photobooth Print Server";
+        trayIcon.Icon = SystemIcons.Application; // fallback awal, diganti UpdateTrayStatus() saat form load
+        trayIcon.ContextMenuStrip = trayMenu;
+        trayIcon.Visible = true;
+        trayIcon.DoubleClick += trayIcon_DoubleClick;
+
         // MainForm
         AutoScaleMode = AutoScaleMode.Font;
-        ClientSize = new Size(720, 985);
-        MinimumSize = new Size(680, 855);
+        AutoScroll = true;
+        ClientSize = new Size(720, 900);
+        MinimumSize = new Size(680, 500);
         Text = "Photobooth Print Server";
         StartPosition = FormStartPosition.CenterScreen;
 
@@ -395,6 +483,7 @@ partial class MainForm
         Controls.Add(grpPrinter);
         Controls.Add(grpPrinterProfile);
         Controls.Add(grpQueue);
+        Controls.Add(grpHistory);
         Controls.Add(grpLog);
     }
 }
