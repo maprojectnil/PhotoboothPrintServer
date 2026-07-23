@@ -1,6 +1,7 @@
 ﻿using System.Drawing.Printing;
 using System.Management;
 using PhotoboothPrintServer.Models;
+using PhotoboothPrintServer.Utilities;
 
 namespace PhotoboothPrintServer.Services;
 
@@ -99,6 +100,11 @@ public class PrinterService
                     caps.PaperSizes.Add(size.PaperName);
             }
 
+            // Media Type/tipe kertas (Glossy, Matte, Plain, dst.) - tidak ada di
+            // PrinterSettings .NET sama sekali, query langsung ke driver via winspool.
+            // Kosong itu normal untuk printer yang tidak mengekspos kapabilitas ini.
+            caps.MediaTypes = NativePrintingInterop.EnumerateMediaTypes(printerName);
+
             var resolutions = settings.PrinterResolutions.Cast<PrinterResolution>().ToList();
 
             var seenLevels = new HashSet<PrintQualityLevel>();
@@ -164,6 +170,54 @@ public class PrinterService
         }
 
         return caps;
+    }
+
+    /// <summary>
+    /// Cek kapabilitas borderless printer untuk Paper Size tertentu TANPA mencetak apa pun -
+    /// hanya query hard margin dari driver (sumber data sama persis dengan yang dipakai
+    /// ImagePrintService saat mencetak sungguhan). Berguna untuk memberi tahu operator di UI
+    /// SEBELUM sesi photobooth berjalan kalau printer yang sedang aktif ternyata tidak
+    /// benar-benar mendukung borderless untuk Paper Size yang dipilih - alih-alih baru
+    /// ketahuan dari log setelah hasil cetak sudah terlanjur ada tepi putih tak diinginkan.
+    /// Generik untuk printer apa pun (tidak hardcode per merk) karena murni baca dari driver.
+    /// </summary>
+    public BorderlessCapability CheckBorderlessCapability(string printerName, string paperSizeName)
+    {
+        var result = new BorderlessCapability();
+
+        if (string.IsNullOrWhiteSpace(printerName) || string.IsNullOrWhiteSpace(paperSizeName))
+            return result;
+
+        try
+        {
+            using var doc = new PrintDocument();
+            doc.PrinterSettings.PrinterName = printerName;
+            if (!doc.PrinterSettings.IsValid) return result;
+
+            PaperSize? matched = null;
+            foreach (PaperSize size in doc.PrinterSettings.PaperSizes)
+            {
+                if (string.Equals(size.PaperName, paperSizeName, StringComparison.OrdinalIgnoreCase))
+                {
+                    matched = size;
+                    break;
+                }
+            }
+
+            if (matched == null) return result;
+
+            doc.DefaultPageSettings.PaperSize = matched;
+            result.PaperSizeFound = true;
+            result.HardMarginXMm = doc.DefaultPageSettings.HardMarginX / 100.0 * 25.4;
+            result.HardMarginYMm = doc.DefaultPageSettings.HardMarginY / 100.0 * 25.4;
+        }
+        catch
+        {
+            // Gagal cek kapabilitas tidak boleh crash - caller akan melihat PaperSizeFound
+            // = false / hard margin default 0 dan bisa memutuskan sendiri.
+        }
+
+        return result;
     }
 
     /// <summary>

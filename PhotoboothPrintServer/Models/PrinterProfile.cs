@@ -26,4 +26,12 @@ public class PrinterProfile
 
     /// <summary>true = Landscape, false = Portrait.</summary>
     public bool Landscape { get; set; } = false;
+
+    /// <summary>
+    /// Nama tipe kertas/media (mis. "Glossy Photo Paper") persis seperti dilaporkan driver
+    /// (PrinterMediaType.Name). Kosong = tidak diset, printer memakai default drivernya
+    /// sendiri. Penting untuk cetak foto karena mempengaruhi profil warna/saturasi tinta
+    /// yang dipakai driver - kertas glossy vs matte vs plain butuh kalibrasi berbeda.
+    /// </summary>
+    public string MediaTypeName { get; set; } = string.Empty;
 }

@@ -500,6 +500,9 @@ public partial class MainForm : Form
             chkBorderless.Checked = false;
             chkBorderless.Enabled = false;
 
+            cmbMediaType.Items.Clear();
+            cmbMediaType.Enabled = false;
+
             lblProfileInfoValue.Text = "-";
         }
         finally
@@ -576,11 +579,41 @@ public partial class MainForm : Form
             chkBorderless.Enabled = true;
             chkBorderless.Checked = profile.Borderless;
 
+            // --- Media Type/tipe kertas: opsional - banyak printer non-foto tidak
+            // mengekspos kapabilitas ini sama sekali, jadi selalu ada opsi "Default
+            // driver" di posisi pertama supaya operator tidak wajib memilih.
+            const string defaultMediaTypeLabel = "(Default driver)";
+            cmbMediaType.Items.Clear();
+            cmbMediaType.Items.Add(defaultMediaTypeLabel);
+            foreach (var mediaType in _currentCapabilities.MediaTypes)
+                cmbMediaType.Items.Add(mediaType.Name);
+
+            cmbMediaType.Enabled = _currentCapabilities.MediaTypes.Count > 0;
+            int mIdx = string.IsNullOrEmpty(profile.MediaTypeName)
+                ? 0
+                : cmbMediaType.Items.IndexOf(profile.MediaTypeName);
+            cmbMediaType.SelectedIndex = mIdx >= 0 ? mIdx : 0;
+            profile.MediaTypeName = cmbMediaType.SelectedIndex == 0
+                ? string.Empty
+                : cmbMediaType.SelectedItem?.ToString() ?? string.Empty;
+
             lblProfileInfoValue.Text =
                 $"{_currentCapabilities.PaperSizes.Count} paper size terdeteksi  |  " +
-                (_currentCapabilities.SupportsColor ? "Color printer" : "Monochrome printer");
+                (_currentCapabilities.SupportsColor ? "Color printer" : "Monochrome printer") +
+                (_currentCapabilities.MediaTypes.Count > 0
+                    ? $"  |  {_currentCapabilities.MediaTypes.Count} media type terdeteksi"
+                    : string.Empty);
+
+            UpdateBorderlessHint(printerName, profile);
 
             _profileStore.Save(profile);
+        }
+        catch (Exception ex)
+        {
+            // Lapis pertahanan kedua (selain global handler di Program.cs): kegagalan
+            // query kapabilitas driver printer (Paper Size/Media Type/borderless hint) di
+            // sini tidak boleh membuat aplikasi force-close - cukup dicatat di log.
+            AppendLog($"Gagal memuat kapabilitas printer '{printerName}': {ex.Message}");
         }
         finally
         {
@@ -588,28 +621,82 @@ public partial class MainForm : Form
         }
     }
 
+    /// <summary>
+    /// Menambahkan info kapabilitas borderless printer aktif (untuk Paper Size yang
+    /// sedang dipilih) ke lblProfileInfoValue - dicek LANGSUNG dari driver, generik untuk
+    /// printer apa pun. Tujuannya operator tahu SEBELUM sesi photobooth berjalan kalau
+    /// printer yang sedang aktif ternyata tidak benar-benar mendukung true borderless,
+    /// bukan baru ketahuan dari log setelah hasil cetak sudah terlanjur ada tepi putih.
+    /// </summary>
+    private void UpdateBorderlessHint(string printerName, PrinterProfile profile)
+    {
+        if (!profile.Borderless || string.IsNullOrWhiteSpace(profile.PaperSizeName))
+            return;
+
+        var capability = _printerService.CheckBorderlessCapability(printerName, profile.PaperSizeName);
+        if (!capability.PaperSizeFound) return;
+
+        string hint = capability.LikelyTrueBorderless
+            ? "Borderless: printer mendukung true full-bleed untuk Paper Size ini."
+            : $"Borderless: printer punya area tak-tercetak ~{capability.HardMarginXMm:0.#}x" +
+              $"{capability.HardMarginYMm:0.#}mm di tepi untuk Paper Size ini - kemungkinan " +
+              "tidak 100% full-bleed (batas hardware printer, bukan bug aplikasi).";
+
+        lblProfileInfoValue.Text += "\n" + hint;
+    }
+
     private void ProfileControl_Changed(object? sender, EventArgs e)
     {
         if (_suppressProfileEvents) return;
         if (cmbPrinters.SelectedIndex < 0 || cmbPrinters.SelectedIndex >= _printers.Count) return;
 
-        var printerName = _printers[cmbPrinters.SelectedIndex].Name;
+        try
+        {
+            var printerName = _printers[cmbPrinters.SelectedIndex].Name;
 
-        var profile = _profileStore.GetOrCreate(printerName);
-        profile.PrinterName = printerName;
-        profile.PaperSizeName = cmbPaperSize.SelectedItem?.ToString() ?? string.Empty;
-        profile.PrintQuality = cmbPrintQuality.SelectedItem is PrintQualityLevel level ? level : PrintQualityLevel.High;
-        profile.ColorMode = cmbColorMode.SelectedIndex <= 0; // index 0 = "Color"
-        profile.Landscape = cmbOrientation.SelectedIndex == 1; // index 1 = "Landscape"
-        profile.Borderless = chkBorderless.Checked;
+            var profile = _profileStore.GetOrCreate(printerName);
+            profile.PrinterName = printerName;
+            profile.PaperSizeName = cmbPaperSize.SelectedItem?.ToString() ?? string.Empty;
+            profile.PrintQuality = cmbPrintQuality.SelectedItem is PrintQualityLevel level ? level : PrintQualityLevel.High;
+            profile.ColorMode = cmbColorMode.SelectedIndex <= 0; // index 0 = "Color"
+            profile.Landscape = cmbOrientation.SelectedIndex == 1; // index 1 = "Landscape"
+            profile.Borderless = chkBorderless.Checked;
+            profile.MediaTypeName = cmbMediaType.SelectedIndex <= 0
+                ? string.Empty
+                : cmbMediaType.SelectedItem?.ToString() ?? string.Empty;
 
-        _profileStore.Save(profile);
+            lblProfileInfoValue.Text =
+                $"{_currentCapabilities.PaperSizes.Count} paper size terdeteksi  |  " +
+                (_currentCapabilities.SupportsColor ? "Color printer" : "Monochrome printer") +
+                (_currentCapabilities.MediaTypes.Count > 0
+                    ? $"  |  {_currentCapabilities.MediaTypes.Count} media type terdeteksi"
+                    : string.Empty);
 
-        AppendLog($"Printer Profile '{printerName}' disimpan " +
-                   $"(Paper: {profile.PaperSizeName}, Quality: {profile.PrintQuality}, " +
-                   $"Color: {(profile.ColorMode ? "Color" : "Monochrome")}, " +
-                   $"Orientation: {(profile.Landscape ? "Landscape" : "Portrait")}, " +
-                   $"Borderless: {profile.Borderless}).");
+            // Query kapabilitas borderless memanggil driver printer secara sinkron (bisa
+            // lambat, terutama printer jaringan) - hanya jalankan kalau memang Paper Size
+            // atau Borderless yang berubah, bukan di SETIAP perubahan dropdown (Print
+            // Quality/Color/Orientation tidak mempengaruhi hasil hint ini sama sekali).
+            if (ReferenceEquals(sender, cmbPaperSize) || ReferenceEquals(sender, chkBorderless))
+            {
+                UpdateBorderlessHint(printerName, profile);
+            }
+
+            _profileStore.Save(profile);
+
+            AppendLog($"Printer Profile '{printerName}' disimpan " +
+                       $"(Paper: {profile.PaperSizeName}, Quality: {profile.PrintQuality}, " +
+                       $"Color: {(profile.ColorMode ? "Color" : "Monochrome")}, " +
+                       $"Orientation: {(profile.Landscape ? "Landscape" : "Portrait")}, " +
+                       $"Borderless: {profile.Borderless}, " +
+                       $"Media Type: {(string.IsNullOrEmpty(profile.MediaTypeName) ? "Default driver" : profile.MediaTypeName)}).");
+        }
+        catch (Exception ex)
+        {
+            // Lapis pertahanan kedua (selain global handler di Program.cs): kegagalan
+            // query driver printer di sini tidak boleh membuat aplikasi force-close -
+            // cukup dicatat di log, operator tetap bisa lanjut pakai aplikasi.
+            AppendLog($"Gagal menerapkan perubahan Printer Profile: {ex.Message}");
+        }
     }
 
     private async void btnTestPrint_Click(object? sender, EventArgs e)

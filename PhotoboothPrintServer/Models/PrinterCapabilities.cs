@@ -11,4 +11,11 @@ public class PrinterCapabilities
     public List<string> PaperSizes { get; set; } = new();
     public bool SupportsColor { get; set; }
     public List<PrinterQualityOption> QualityOptions { get; set; } = new();
+
+    /// <summary>
+    /// Tipe kertas/media (Glossy, Matte, Plain, dst.) yang benar-benar dilaporkan driver
+    /// printer aktif. Bisa kosong kalau driver tidak mengekspos kapabilitas ini (banyak
+    /// printer non-foto tidak punya) - itu normal, bukan kegagalan.
+    /// </summary>
+    public List<PrinterMediaType> MediaTypes { get; set; } = new();
 }

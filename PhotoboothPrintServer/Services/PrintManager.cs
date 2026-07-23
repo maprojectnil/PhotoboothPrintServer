@@ -157,7 +157,12 @@ public class PrintManager
         try
         {
             await Task.Run(() =>
-                _imagePrintService.PrintImage(settings.SelectedPrinter, job.FilePath, job.Copies, profile));
+                _imagePrintService.PrintImage(
+                    settings.SelectedPrinter,
+                    job.FilePath,
+                    job.Copies,
+                    profile,
+                    log: msg => LogMessage?.Invoke($"{job.JobId}: {msg}")));
 
             job.Status = PrintJobStatus.Completed;
             job.CompletedAt = DateTime.Now;

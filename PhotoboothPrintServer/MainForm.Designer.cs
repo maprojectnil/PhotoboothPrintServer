@@ -46,6 +46,8 @@ partial class MainForm
     private Label lblOrientationCaption = null!;
     private ComboBox cmbOrientation = null!;
     private CheckBox chkBorderless = null!;
+    private Label lblMediaTypeCaption = null!;
+    private ComboBox cmbMediaType = null!;
     private Label lblProfileInfoCaption = null!;
     private Label lblProfileInfoValue = null!;
 
@@ -110,6 +112,8 @@ partial class MainForm
         lblOrientationCaption = new Label();
         cmbOrientation = new ComboBox();
         chkBorderless = new CheckBox();
+        lblMediaTypeCaption = new Label();
+        cmbMediaType = new ComboBox();
         lblProfileInfoCaption = new Label();
         lblProfileInfoValue = new Label();
 
@@ -259,7 +263,7 @@ partial class MainForm
         // grpPrinterProfile
         grpPrinterProfile.Text = "Printer Profile";
         grpPrinterProfile.Location = new Point(20, 380);
-        grpPrinterProfile.Size = new Size(680, 170);
+        grpPrinterProfile.Size = new Size(680, 215);
         grpPrinterProfile.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
 
         lblPaperSizeCaption.Text = "Paper Size:";
@@ -305,12 +309,21 @@ partial class MainForm
         chkBorderless.AutoSize = true;
         chkBorderless.CheckedChanged += ProfileControl_Changed;
 
+        lblMediaTypeCaption.Text = "Media Type:";
+        lblMediaTypeCaption.Location = new Point(380, 98);
+        lblMediaTypeCaption.AutoSize = true;
+
+        cmbMediaType.Location = new Point(480, 95);
+        cmbMediaType.Size = new Size(170, 25);
+        cmbMediaType.DropDownStyle = ComboBoxStyle.DropDownList;
+        cmbMediaType.SelectedIndexChanged += ProfileControl_Changed;
+
         lblProfileInfoCaption.Text = "Info:";
-        lblProfileInfoCaption.Location = new Point(15, 135);
+        lblProfileInfoCaption.Location = new Point(15, 170);
         lblProfileInfoCaption.AutoSize = true;
 
         lblProfileInfoValue.Text = "-";
-        lblProfileInfoValue.Location = new Point(150, 135);
+        lblProfileInfoValue.Location = new Point(150, 170);
         lblProfileInfoValue.AutoSize = true;
         lblProfileInfoValue.Font = new Font("Segoe UI", 8.5F, FontStyle.Italic);
         lblProfileInfoValue.ForeColor = Color.DimGray;
@@ -324,12 +337,14 @@ partial class MainForm
         grpPrinterProfile.Controls.Add(lblOrientationCaption);
         grpPrinterProfile.Controls.Add(cmbOrientation);
         grpPrinterProfile.Controls.Add(chkBorderless);
+        grpPrinterProfile.Controls.Add(lblMediaTypeCaption);
+        grpPrinterProfile.Controls.Add(cmbMediaType);
         grpPrinterProfile.Controls.Add(lblProfileInfoCaption);
         grpPrinterProfile.Controls.Add(lblProfileInfoValue);
 
         // grpQueue
         grpQueue.Text = "HTTP API && Print Queue";
-        grpQueue.Location = new Point(20, 560);
+        grpQueue.Location = new Point(20, 605);
         grpQueue.Size = new Size(680, 240);
         grpQueue.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
 
@@ -393,7 +408,7 @@ partial class MainForm
 
         // grpHistory
         grpHistory.Text = "Print History";
-        grpHistory.Location = new Point(20, 810);
+        grpHistory.Location = new Point(20, 855);
         grpHistory.Size = new Size(680, 230);
         grpHistory.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
 
@@ -424,7 +439,7 @@ partial class MainForm
 
         // grpLog
         grpLog.Text = "Log";
-        grpLog.Location = new Point(20, 1050);
+        grpLog.Location = new Point(20, 1095);
         grpLog.Size = new Size(680, 150);
         grpLog.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
 
