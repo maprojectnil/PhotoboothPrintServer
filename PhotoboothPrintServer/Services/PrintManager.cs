@@ -158,11 +158,8 @@ public class PrintManager
         {
             await Task.Run(() =>
                 _imagePrintService.PrintImage(
-                    settings.SelectedPrinter,
-                    job.FilePath,
-                    job.Copies,
-                    profile,
-                    log: msg => LogMessage?.Invoke($"{job.JobId}: {msg}")));
+                    settings.SelectedPrinter, job.FilePath, job.Copies, profile,
+                    log: msg => LogMessage?.Invoke(msg)));
 
             job.Status = PrintJobStatus.Completed;
             job.CompletedAt = DateTime.Now;
@@ -223,8 +220,11 @@ public class PrintManager
         string color = profile.ColorMode ? "Color" : "Monochrome";
         string orientation = profile.Landscape ? "Landscape" : "Portrait";
         string borderless = profile.Borderless ? ", Borderless" : "";
+        string printSize = string.IsNullOrWhiteSpace(profile.PrintSizeName)
+            ? ""
+            : $", Print Size: {profile.PrintSizeName} ({profile.PrintWidthMm:0.#}x{profile.PrintHeightMm:0.#}mm, {profile.Scaling})";
 
-        return $"{paper} | {profile.PrintQuality} | {color} | {orientation}{borderless}";
+        return $"{paper} | {profile.PrintQuality} | {color} | {orientation}{borderless}{printSize}";
     }
 
     private static void TryDeleteTempFile(string path)

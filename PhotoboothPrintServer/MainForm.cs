@@ -497,11 +497,21 @@ public partial class MainForm : Form
             cmbOrientation.SelectedIndex = -1;
             cmbOrientation.Enabled = false;
 
+            cmbPrintSize.Items.Clear();
+            cmbPrintSize.Enabled = false;
+
+            cmbScaling.Items.Clear();
+            cmbScaling.Enabled = false;
+
+            cmbPosition.Items.Clear();
+            cmbPosition.Enabled = false;
+
+            txtCustomWidthMm.Text = string.Empty;
+            txtCustomHeightMm.Text = string.Empty;
+            SetCustomSizeFieldsVisible(false);
+
             chkBorderless.Checked = false;
             chkBorderless.Enabled = false;
-
-            cmbMediaType.Items.Clear();
-            cmbMediaType.Enabled = false;
 
             lblProfileInfoValue.Text = "-";
         }
@@ -575,45 +585,49 @@ public partial class MainForm : Form
             cmbOrientation.Enabled = true;
             cmbOrientation.SelectedIndex = profile.Landscape ? 1 : 0;
 
+            // --- Print Size (fisik, terpisah dari Paper Size - lihat PrintSizeProfile) ---
+            cmbPrintSize.Items.Clear();
+            foreach (var preset in PrintSizeProfile.Presets)
+                cmbPrintSize.Items.Add(preset.Name);
+            cmbPrintSize.Items.Add(PrintSizeProfile.CustomName);
+            cmbPrintSize.Enabled = true;
+
+            // Default photobooth yang masuk akal untuk profil baru / belum pernah diset (Fase minimal
+            // backward-compatible: mengisi Print Size default TIDAK mengubah hasil cetak profil lama,
+            // karena Scaling default tetap FitToPage sampai user secara eksplisit mengubahnya).
+            string printSizeName = string.IsNullOrWhiteSpace(profile.PrintSizeName) ? "4R" : profile.PrintSizeName;
+            int psIdx = cmbPrintSize.Items.IndexOf(printSizeName);
+            cmbPrintSize.SelectedIndex = psIdx >= 0 ? psIdx : cmbPrintSize.Items.IndexOf("4R");
+            ApplySelectedPrintSizeToProfile(profile);
+
+            // --- Scaling ---
+            cmbScaling.Items.Clear();
+            foreach (ScalingMode mode in Enum.GetValues<ScalingMode>())
+                cmbScaling.Items.Add(mode);
+            cmbScaling.Enabled = true;
+            int scIdx = cmbScaling.Items.IndexOf(profile.Scaling);
+            cmbScaling.SelectedIndex = scIdx >= 0 ? scIdx : cmbScaling.Items.IndexOf(ScalingMode.FitToPage);
+            profile.Scaling = cmbScaling.SelectedItem is ScalingMode selectedScaling ? selectedScaling : ScalingMode.FitToPage;
+
+            // --- Position (hanya Center & TopLeft yang diekspos di UI - lihat PrintPositionMode.Custom) ---
+            cmbPosition.Items.Clear();
+            cmbPosition.Items.Add(PrintPositionMode.Center);
+            cmbPosition.Items.Add(PrintPositionMode.TopLeft);
+            cmbPosition.Enabled = true;
+            var savedPosition = profile.Position == PrintPositionMode.Custom ? PrintPositionMode.Center : profile.Position;
+            int posIdx = cmbPosition.Items.IndexOf(savedPosition);
+            cmbPosition.SelectedIndex = posIdx >= 0 ? posIdx : 0;
+            profile.Position = cmbPosition.SelectedItem is PrintPositionMode selectedPosition ? selectedPosition : PrintPositionMode.Center;
+
             // --- Borderless ---
             chkBorderless.Enabled = true;
             chkBorderless.Checked = profile.Borderless;
 
-            // --- Media Type/tipe kertas: opsional - banyak printer non-foto tidak
-            // mengekspos kapabilitas ini sama sekali, jadi selalu ada opsi "Default
-            // driver" di posisi pertama supaya operator tidak wajib memilih.
-            const string defaultMediaTypeLabel = "(Default driver)";
-            cmbMediaType.Items.Clear();
-            cmbMediaType.Items.Add(defaultMediaTypeLabel);
-            foreach (var mediaType in _currentCapabilities.MediaTypes)
-                cmbMediaType.Items.Add(mediaType.Name);
-
-            cmbMediaType.Enabled = _currentCapabilities.MediaTypes.Count > 0;
-            int mIdx = string.IsNullOrEmpty(profile.MediaTypeName)
-                ? 0
-                : cmbMediaType.Items.IndexOf(profile.MediaTypeName);
-            cmbMediaType.SelectedIndex = mIdx >= 0 ? mIdx : 0;
-            profile.MediaTypeName = cmbMediaType.SelectedIndex == 0
-                ? string.Empty
-                : cmbMediaType.SelectedItem?.ToString() ?? string.Empty;
-
             lblProfileInfoValue.Text =
                 $"{_currentCapabilities.PaperSizes.Count} paper size terdeteksi  |  " +
-                (_currentCapabilities.SupportsColor ? "Color printer" : "Monochrome printer") +
-                (_currentCapabilities.MediaTypes.Count > 0
-                    ? $"  |  {_currentCapabilities.MediaTypes.Count} media type terdeteksi"
-                    : string.Empty);
-
-            UpdateBorderlessHint(printerName, profile);
+                (_currentCapabilities.SupportsColor ? "Color printer" : "Monochrome printer");
 
             _profileStore.Save(profile);
-        }
-        catch (Exception ex)
-        {
-            // Lapis pertahanan kedua (selain global handler di Program.cs): kegagalan
-            // query kapabilitas driver printer (Paper Size/Media Type/borderless hint) di
-            // sini tidak boleh membuat aplikasi force-close - cukup dicatat di log.
-            AppendLog($"Gagal memuat kapabilitas printer '{printerName}': {ex.Message}");
         }
         finally
         {
@@ -621,83 +635,97 @@ public partial class MainForm : Form
         }
     }
 
-    /// <summary>
-    /// Menambahkan info kapabilitas borderless printer aktif (untuk Paper Size yang
-    /// sedang dipilih) ke lblProfileInfoValue - dicek LANGSUNG dari driver, generik untuk
-    /// printer apa pun. Tujuannya operator tahu SEBELUM sesi photobooth berjalan kalau
-    /// printer yang sedang aktif ternyata tidak benar-benar mendukung true borderless,
-    /// bukan baru ketahuan dari log setelah hasil cetak sudah terlanjur ada tepi putih.
-    /// </summary>
-    private void UpdateBorderlessHint(string printerName, PrinterProfile profile)
-    {
-        if (!profile.Borderless || string.IsNullOrWhiteSpace(profile.PaperSizeName))
-            return;
-
-        var capability = _printerService.CheckBorderlessCapability(printerName, profile.PaperSizeName);
-        if (!capability.PaperSizeFound) return;
-
-        string hint = capability.LikelyTrueBorderless
-            ? "Borderless: printer mendukung true full-bleed untuk Paper Size ini."
-            : $"Borderless: printer punya area tak-tercetak ~{capability.HardMarginXMm:0.#}x" +
-              $"{capability.HardMarginYMm:0.#}mm di tepi untuk Paper Size ini - kemungkinan " +
-              "tidak 100% full-bleed (batas hardware printer, bukan bug aplikasi).";
-
-        lblProfileInfoValue.Text += "\n" + hint;
-    }
-
     private void ProfileControl_Changed(object? sender, EventArgs e)
     {
         if (_suppressProfileEvents) return;
         if (cmbPrinters.SelectedIndex < 0 || cmbPrinters.SelectedIndex >= _printers.Count) return;
 
-        try
+        var printerName = _printers[cmbPrinters.SelectedIndex].Name;
+
+        var profile = _profileStore.GetOrCreate(printerName);
+        profile.PrinterName = printerName;
+        profile.PaperSizeName = cmbPaperSize.SelectedItem?.ToString() ?? string.Empty;
+        profile.PrintQuality = cmbPrintQuality.SelectedItem is PrintQualityLevel level ? level : PrintQualityLevel.High;
+        profile.ColorMode = cmbColorMode.SelectedIndex <= 0; // index 0 = "Color"
+        profile.Landscape = cmbOrientation.SelectedIndex == 1; // index 1 = "Landscape"
+        profile.Borderless = chkBorderless.Checked;
+
+        // --- Print Size / Scaling / Position (perbaikan physical-size printing) ---
+        ApplySelectedPrintSizeToProfile(profile);
+        profile.Scaling = cmbScaling.SelectedItem is ScalingMode scaling ? scaling : ScalingMode.FitToPage;
+        profile.Position = cmbPosition.SelectedItem is PrintPositionMode position ? position : PrintPositionMode.Center;
+
+        if (string.Equals(profile.PrintSizeName, PrintSizeProfile.CustomName, StringComparison.OrdinalIgnoreCase))
         {
-            var printerName = _printers[cmbPrinters.SelectedIndex].Name;
-
-            var profile = _profileStore.GetOrCreate(printerName);
-            profile.PrinterName = printerName;
-            profile.PaperSizeName = cmbPaperSize.SelectedItem?.ToString() ?? string.Empty;
-            profile.PrintQuality = cmbPrintQuality.SelectedItem is PrintQualityLevel level ? level : PrintQualityLevel.High;
-            profile.ColorMode = cmbColorMode.SelectedIndex <= 0; // index 0 = "Color"
-            profile.Landscape = cmbOrientation.SelectedIndex == 1; // index 1 = "Landscape"
-            profile.Borderless = chkBorderless.Checked;
-            profile.MediaTypeName = cmbMediaType.SelectedIndex <= 0
-                ? string.Empty
-                : cmbMediaType.SelectedItem?.ToString() ?? string.Empty;
-
-            lblProfileInfoValue.Text =
-                $"{_currentCapabilities.PaperSizes.Count} paper size terdeteksi  |  " +
-                (_currentCapabilities.SupportsColor ? "Color printer" : "Monochrome printer") +
-                (_currentCapabilities.MediaTypes.Count > 0
-                    ? $"  |  {_currentCapabilities.MediaTypes.Count} media type terdeteksi"
-                    : string.Empty);
-
-            // Query kapabilitas borderless memanggil driver printer secara sinkron (bisa
-            // lambat, terutama printer jaringan) - hanya jalankan kalau memang Paper Size
-            // atau Borderless yang berubah, bukan di SETIAP perubahan dropdown (Print
-            // Quality/Color/Orientation tidak mempengaruhi hasil hint ini sama sekali).
-            if (ReferenceEquals(sender, cmbPaperSize) || ReferenceEquals(sender, chkBorderless))
-            {
-                UpdateBorderlessHint(printerName, profile);
-            }
-
-            _profileStore.Save(profile);
-
-            AppendLog($"Printer Profile '{printerName}' disimpan " +
-                       $"(Paper: {profile.PaperSizeName}, Quality: {profile.PrintQuality}, " +
-                       $"Color: {(profile.ColorMode ? "Color" : "Monochrome")}, " +
-                       $"Orientation: {(profile.Landscape ? "Landscape" : "Portrait")}, " +
-                       $"Borderless: {profile.Borderless}, " +
-                       $"Media Type: {(string.IsNullOrEmpty(profile.MediaTypeName) ? "Default driver" : profile.MediaTypeName)}).");
+            profile.PrintWidthMm = ParseMm(txtCustomWidthMm.Text);
+            profile.PrintHeightMm = ParseMm(txtCustomHeightMm.Text);
         }
-        catch (Exception ex)
+
+        _profileStore.Save(profile);
+
+        AppendLog($"Printer Profile '{printerName}' disimpan " +
+                   $"(Paper: {profile.PaperSizeName}, Quality: {profile.PrintQuality}, " +
+                   $"Color: {(profile.ColorMode ? "Color" : "Monochrome")}, " +
+                   $"Orientation: {(profile.Landscape ? "Landscape" : "Portrait")}, " +
+                   $"Borderless: {profile.Borderless}, " +
+                   $"Print Size: {profile.PrintSizeName} [{profile.PrintWidthMm:0.#} x {profile.PrintHeightMm:0.#} mm], " +
+                   $"Scaling: {profile.Scaling}, Position: {profile.Position}).");
+    }
+
+    /// <summary>
+    /// Menyinkronkan pilihan cmbPrintSize ke PrinterProfile: untuk preset, ambil ukuran
+    /// fisik (mm) langsung dari PrintSizeProfile.Presets (bukan dari pixel gambar). Untuk
+    /// "Custom", tampilkan/aktifkan input mm manual dan biarkan nilainya diisi oleh caller
+    /// (lihat pemanggil txtCustomWidthMm/txtCustomHeightMm di ProfileControl_Changed).
+    /// </summary>
+    private void ApplySelectedPrintSizeToProfile(PrinterProfile profile)
+    {
+        string name = cmbPrintSize.SelectedItem?.ToString() ?? "4R";
+        profile.PrintSizeName = name;
+
+        bool isCustom = string.Equals(name, PrintSizeProfile.CustomName, StringComparison.OrdinalIgnoreCase);
+        SetCustomSizeFieldsVisible(isCustom);
+
+        if (isCustom)
         {
-            // Lapis pertahanan kedua (selain global handler di Program.cs): kegagalan
-            // query driver printer di sini tidak boleh membuat aplikasi force-close -
-            // cukup dicatat di log, operator tetap bisa lanjut pakai aplikasi.
-            AppendLog($"Gagal menerapkan perubahan Printer Profile: {ex.Message}");
+            // Jangan timpa nilai mm yang sudah tersimpan/diketik user; hanya isi textbox
+            // saat pertama kali beralih ke Custom dan textbox masih kosong. Set nilai lewat
+            // _suppressProfileEvents supaya assignment Text ini tidak memicu ProfileControl_Changed
+            // lagi secara reentrant (yang akan menyebabkan Save/log ganda untuk satu aksi user).
+            bool wasSuppressed = _suppressProfileEvents;
+            _suppressProfileEvents = true;
+            try
+            {
+                if (string.IsNullOrWhiteSpace(txtCustomWidthMm.Text) && profile.PrintWidthMm > 0)
+                    txtCustomWidthMm.Text = profile.PrintWidthMm.ToString("0.#");
+                if (string.IsNullOrWhiteSpace(txtCustomHeightMm.Text) && profile.PrintHeightMm > 0)
+                    txtCustomHeightMm.Text = profile.PrintHeightMm.ToString("0.#");
+            }
+            finally
+            {
+                _suppressProfileEvents = wasSuppressed;
+            }
+        }
+        else
+        {
+            var preset = PrintSizeProfile.FindPreset(name);
+            profile.PrintWidthMm = preset?.WidthMm ?? 0;
+            profile.PrintHeightMm = preset?.HeightMm ?? 0;
         }
     }
+
+    private void SetCustomSizeFieldsVisible(bool visible)
+    {
+        lblCustomSizeCaption.Visible = visible;
+        txtCustomWidthMm.Visible = visible;
+        lblCustomSizeSeparator.Visible = visible;
+        txtCustomHeightMm.Visible = visible;
+    }
+
+    private static double ParseMm(string text) =>
+        double.TryParse(text, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out double v) && v > 0
+            ? v
+            : 0;
 
     private async void btnTestPrint_Click(object? sender, EventArgs e)
     {

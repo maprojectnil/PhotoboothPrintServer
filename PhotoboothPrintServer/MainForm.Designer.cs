@@ -46,8 +46,16 @@ partial class MainForm
     private Label lblOrientationCaption = null!;
     private ComboBox cmbOrientation = null!;
     private CheckBox chkBorderless = null!;
-    private Label lblMediaTypeCaption = null!;
-    private ComboBox cmbMediaType = null!;
+    private Label lblPrintSizeCaption = null!;
+    private ComboBox cmbPrintSize = null!;
+    private Label lblScalingCaption = null!;
+    private ComboBox cmbScaling = null!;
+    private Label lblPositionCaption = null!;
+    private ComboBox cmbPosition = null!;
+    private Label lblCustomSizeCaption = null!;
+    private TextBox txtCustomWidthMm = null!;
+    private Label lblCustomSizeSeparator = null!;
+    private TextBox txtCustomHeightMm = null!;
     private Label lblProfileInfoCaption = null!;
     private Label lblProfileInfoValue = null!;
 
@@ -112,8 +120,16 @@ partial class MainForm
         lblOrientationCaption = new Label();
         cmbOrientation = new ComboBox();
         chkBorderless = new CheckBox();
-        lblMediaTypeCaption = new Label();
-        cmbMediaType = new ComboBox();
+        lblPrintSizeCaption = new Label();
+        cmbPrintSize = new ComboBox();
+        lblScalingCaption = new Label();
+        cmbScaling = new ComboBox();
+        lblPositionCaption = new Label();
+        cmbPosition = new ComboBox();
+        lblCustomSizeCaption = new Label();
+        txtCustomWidthMm = new TextBox();
+        lblCustomSizeSeparator = new Label();
+        txtCustomHeightMm = new TextBox();
         lblProfileInfoCaption = new Label();
         lblProfileInfoValue = new Label();
 
@@ -263,7 +279,7 @@ partial class MainForm
         // grpPrinterProfile
         grpPrinterProfile.Text = "Printer Profile";
         grpPrinterProfile.Location = new Point(20, 380);
-        grpPrinterProfile.Size = new Size(680, 215);
+        grpPrinterProfile.Size = new Size(680, 250);
         grpPrinterProfile.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
 
         lblPaperSizeCaption.Text = "Paper Size:";
@@ -304,26 +320,67 @@ partial class MainForm
         cmbOrientation.Items.Add("Landscape");
         cmbOrientation.SelectedIndexChanged += ProfileControl_Changed;
 
+        // --- Print Size (fisik, terpisah dari Paper Size) & Scaling ---
+        lblPrintSizeCaption.Text = "Print Size:";
+        lblPrintSizeCaption.Location = new Point(15, 98);
+        lblPrintSizeCaption.AutoSize = true;
+
+        cmbPrintSize.Location = new Point(150, 95);
+        cmbPrintSize.Size = new Size(200, 25);
+        cmbPrintSize.DropDownStyle = ComboBoxStyle.DropDownList;
+        cmbPrintSize.SelectedIndexChanged += ProfileControl_Changed;
+
+        lblScalingCaption.Text = "Scaling:";
+        lblScalingCaption.Location = new Point(380, 98);
+        lblScalingCaption.AutoSize = true;
+
+        cmbScaling.Location = new Point(480, 95);
+        cmbScaling.Size = new Size(170, 25);
+        cmbScaling.DropDownStyle = ComboBoxStyle.DropDownList;
+        cmbScaling.SelectedIndexChanged += ProfileControl_Changed;
+
+        // --- Position & Borderless ---
+        lblPositionCaption.Text = "Position:";
+        lblPositionCaption.Location = new Point(15, 133);
+        lblPositionCaption.AutoSize = true;
+
+        cmbPosition.Location = new Point(150, 130);
+        cmbPosition.Size = new Size(200, 25);
+        cmbPosition.DropDownStyle = ComboBoxStyle.DropDownList;
+        cmbPosition.SelectedIndexChanged += ProfileControl_Changed;
+
         chkBorderless.Text = "Borderless";
-        chkBorderless.Location = new Point(150, 98);
+        chkBorderless.Location = new Point(480, 133);
         chkBorderless.AutoSize = true;
         chkBorderless.CheckedChanged += ProfileControl_Changed;
 
-        lblMediaTypeCaption.Text = "Media Type:";
-        lblMediaTypeCaption.Location = new Point(380, 98);
-        lblMediaTypeCaption.AutoSize = true;
+        // --- Custom Print Size (mm) - hanya terlihat saat Print Size = "Custom" ---
+        lblCustomSizeCaption.Text = "Custom Size (mm):";
+        lblCustomSizeCaption.Location = new Point(15, 168);
+        lblCustomSizeCaption.AutoSize = true;
+        lblCustomSizeCaption.Visible = false;
 
-        cmbMediaType.Location = new Point(480, 95);
-        cmbMediaType.Size = new Size(170, 25);
-        cmbMediaType.DropDownStyle = ComboBoxStyle.DropDownList;
-        cmbMediaType.SelectedIndexChanged += ProfileControl_Changed;
+        txtCustomWidthMm.Location = new Point(150, 165);
+        txtCustomWidthMm.Size = new Size(70, 25);
+        txtCustomWidthMm.Visible = false;
+        txtCustomWidthMm.TextChanged += ProfileControl_Changed;
+
+        lblCustomSizeSeparator.Text = "x";
+        lblCustomSizeSeparator.Location = new Point(228, 168);
+        lblCustomSizeSeparator.AutoSize = true;
+        lblCustomSizeSeparator.Visible = false;
+
+        txtCustomHeightMm.Location = new Point(245, 165);
+        txtCustomHeightMm.Size = new Size(70, 25);
+        txtCustomHeightMm.Visible = false;
+        txtCustomHeightMm.TextChanged += ProfileControl_Changed;
 
         lblProfileInfoCaption.Text = "Info:";
-        lblProfileInfoCaption.Location = new Point(15, 170);
+        lblProfileInfoCaption.Location = new Point(15, 205);
         lblProfileInfoCaption.AutoSize = true;
 
         lblProfileInfoValue.Text = "-";
-        lblProfileInfoValue.Location = new Point(150, 170);
+        lblProfileInfoValue.Location = new Point(150, 205);
         lblProfileInfoValue.AutoSize = true;
         lblProfileInfoValue.Font = new Font("Segoe UI", 8.5F, FontStyle.Italic);
         lblProfileInfoValue.ForeColor = Color.DimGray;
@@ -336,15 +393,23 @@ partial class MainForm
         grpPrinterProfile.Controls.Add(cmbColorMode);
         grpPrinterProfile.Controls.Add(lblOrientationCaption);
         grpPrinterProfile.Controls.Add(cmbOrientation);
+        grpPrinterProfile.Controls.Add(lblPrintSizeCaption);
+        grpPrinterProfile.Controls.Add(cmbPrintSize);
+        grpPrinterProfile.Controls.Add(lblScalingCaption);
+        grpPrinterProfile.Controls.Add(cmbScaling);
+        grpPrinterProfile.Controls.Add(lblPositionCaption);
+        grpPrinterProfile.Controls.Add(cmbPosition);
         grpPrinterProfile.Controls.Add(chkBorderless);
-        grpPrinterProfile.Controls.Add(lblMediaTypeCaption);
-        grpPrinterProfile.Controls.Add(cmbMediaType);
+        grpPrinterProfile.Controls.Add(lblCustomSizeCaption);
+        grpPrinterProfile.Controls.Add(txtCustomWidthMm);
+        grpPrinterProfile.Controls.Add(lblCustomSizeSeparator);
+        grpPrinterProfile.Controls.Add(txtCustomHeightMm);
         grpPrinterProfile.Controls.Add(lblProfileInfoCaption);
         grpPrinterProfile.Controls.Add(lblProfileInfoValue);
 
         // grpQueue
         grpQueue.Text = "HTTP API && Print Queue";
-        grpQueue.Location = new Point(20, 605);
+        grpQueue.Location = new Point(20, 640);
         grpQueue.Size = new Size(680, 240);
         grpQueue.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
 
@@ -408,7 +473,7 @@ partial class MainForm
 
         // grpHistory
         grpHistory.Text = "Print History";
-        grpHistory.Location = new Point(20, 855);
+        grpHistory.Location = new Point(20, 890);
         grpHistory.Size = new Size(680, 230);
         grpHistory.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
 
@@ -439,7 +504,7 @@ partial class MainForm
 
         // grpLog
         grpLog.Text = "Log";
-        grpLog.Location = new Point(20, 1095);
+        grpLog.Location = new Point(20, 1130);
         grpLog.Size = new Size(680, 150);
         grpLog.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
 
@@ -488,7 +553,7 @@ partial class MainForm
         // MainForm
         AutoScaleMode = AutoScaleMode.Font;
         AutoScroll = true;
-        ClientSize = new Size(720, 900);
+        ClientSize = new Size(720, 980);
         MinimumSize = new Size(680, 500);
         Text = "Photobooth Print Server";
         StartPosition = FormStartPosition.CenterScreen;

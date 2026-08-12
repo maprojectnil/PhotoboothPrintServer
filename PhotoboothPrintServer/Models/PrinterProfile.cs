@@ -27,11 +27,40 @@ public class PrinterProfile
     /// <summary>true = Landscape, false = Portrait.</summary>
     public bool Landscape { get; set; } = false;
 
+    // ===================== Physical Print Size (perbaikan printing) =====================
+
     /// <summary>
-    /// Nama tipe kertas/media (mis. "Glossy Photo Paper") persis seperti dilaporkan driver
-    /// (PrinterMediaType.Name). Kosong = tidak diset, printer memakai default drivernya
-    /// sendiri. Penting untuk cetak foto karena mempengaruhi profil warna/saturasi tinta
-    /// yang dipakai driver - kertas glossy vs matte vs plain butuh kalibrasi berbeda.
+    /// Nama preset Print Size (3R/4R/5R/6R/A4/A5/Custom) - lihat PrintSizeProfile.Presets.
+    /// Kosong = belum pernah diset user. Ini BEDA dengan PaperSizeName: Paper Size adalah
+    /// kertas fisik di printer, Print Size adalah ukuran gambar yang ingin dicetak di atasnya.
     /// </summary>
-    public string MediaTypeName { get; set; } = string.Empty;
+    public string PrintSizeName { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Lebar target cetak fisik dalam milimeter (orientasi Portrait profil ini).
+    /// Sumber kebenaran untuk ScalingMode.ActualSize - BUKAN diturunkan dari pixel gambar
+    /// atau dari Paper Size. 0 berarti belum diset (lihat PrintSizeName).
+    /// </summary>
+    public double PrintWidthMm { get; set; }
+
+    /// <summary>Tinggi target cetak fisik dalam milimeter (orientasi Portrait profil ini).</summary>
+    public double PrintHeightMm { get; set; }
+
+    /// <summary>
+    /// Bagaimana gambar disesuaikan terhadap Print Size / area cetak.
+    /// PENTING untuk backward compatibility: default-nya SENGAJA FitToPage (nilai enum 0),
+    /// sama seperti behavior lama, supaya profil yang sudah tersimpan sebelum fitur ini
+    /// ada (JSON tanpa field "Scaling") otomatis ter-deserialize ke FitToPage - tidak ada
+    /// perubahan hasil cetak untuk konfigurasi existing.
+    /// </summary>
+    public ScalingMode Scaling { get; set; } = ScalingMode.FitToPage;
+
+    /// <summary>Di mana target print ditempatkan pada kertas. Default Center.</summary>
+    public PrintPositionMode Position { get; set; } = PrintPositionMode.Center;
+
+    /// <summary>Offset X (mm) dari top-left halaman, hanya dipakai jika Position = Custom.</summary>
+    public double CustomOffsetXMm { get; set; }
+
+    /// <summary>Offset Y (mm) dari top-left halaman, hanya dipakai jika Position = Custom.</summary>
+    public double CustomOffsetYMm { get; set; }
 }
