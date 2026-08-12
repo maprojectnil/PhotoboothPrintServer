@@ -380,6 +380,7 @@ partial class MainForm
         cmbOrientation.DropDownStyle = ComboBoxStyle.DropDownList;
         cmbOrientation.Items.Add("Portrait");
         cmbOrientation.Items.Add("Landscape");
+        cmbOrientation.Items.Add("Auto");
         cmbOrientation.SelectedIndexChanged += ProfileControl_Changed;
 
         // --- Print Size (fisik, terpisah dari Paper Size) & Scaling ---

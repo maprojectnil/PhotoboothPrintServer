@@ -41,7 +41,7 @@ public class ImagePrintService
                     $"Printer '{printerName}' tidak tersedia / tidak terhubung.");
             }
 
-            ApplyProfile(doc, profile, log);
+            ApplyProfile(doc, profile, image, log);
 
             doc.PrintPage += (sender, e) => DrawImagePage(e, image, profile, log);
             doc.Print();
@@ -52,7 +52,7 @@ public class ImagePrintService
     /// Menerapkan Printer Profile ke PrintDocument. Setiap opsi hanya diterapkan jika
     /// benar-benar tersedia di driver printer yang aktif (tidak dipaksakan).
     /// </summary>
-    private static void ApplyProfile(PrintDocument doc, PrinterProfile? profile, Action<string>? log = null)
+    private static void ApplyProfile(PrintDocument doc, PrinterProfile? profile, Image image, Action<string>? log = null)
     {
         if (profile == null) return; // fallback ke default driver (perilaku Fase 1/2)
 
@@ -72,8 +72,10 @@ public class ImagePrintService
             }
         }
 
-        // Orientation.
-        pageSettings.Landscape = profile.Landscape;
+        // Orientation - Auto ditentukan dari aspect ratio gambar (lihat ResolveLandscape),
+        // selain itu mengikuti pilihan manual Portrait/Landscape seperti sebelumnya.
+        bool landscape = ResolveLandscape(profile, image);
+        pageSettings.Landscape = landscape;
 
         // Color Mode - hanya diterapkan jika printer mendukung warna.
         if (settings.SupportsColor)
@@ -107,6 +109,19 @@ public class ImagePrintService
                             $"({mediaTypeError ?? "unknown error"}). Job tetap dicetak dengan tipe kertas default driver.");
             }
         }
+    }
+
+    /// <summary>
+    /// Menentukan orientasi cetak final untuk satu gambar. Auto (profile.OrientationAuto)
+    /// membandingkan lebar vs tinggi gambar - lebih lebar dari tinggi dicetak Landscape,
+    /// selain itu Portrait; gambar bujur sangkar (width == height) dicetak Portrait. Selain
+    /// Auto, mengikuti pilihan manual profile.Landscape seperti sebelumnya (tidak berubah).
+    /// </summary>
+    private static bool ResolveLandscape(PrinterProfile? profile, Image image)
+    {
+        if (profile == null) return false;
+        if (profile.OrientationAuto) return image.Width > image.Height;
+        return profile.Landscape;
     }
 
     private static PrinterResolution? FindResolution(PrinterSettings settings, PrintQualityLevel level)
@@ -167,7 +182,7 @@ public class ImagePrintService
 
         ScalingMode scaling = profile?.Scaling ?? ScalingMode.FitToPage;
         PrintPositionMode positionMode = profile?.Position ?? PrintPositionMode.Center;
-        bool landscape = profile?.Landscape ?? false;
+        bool landscape = ResolveLandscape(profile, image);
 
         bool hasPrintSize = profile != null && profile.PrintWidthMm > 0 && profile.PrintHeightMm > 0;
 
@@ -206,6 +221,7 @@ public class ImagePrintService
             "Print - " +
             $"Paper: {e.PageSettings.PaperSize?.PaperName ?? "-"} | " +
             $"Print Size: {(string.IsNullOrWhiteSpace(profile?.PrintSizeName) ? "-" : profile!.PrintSizeName)} | " +
+            $"Orientation: {(profile?.OrientationAuto == true ? $"Auto -> {(landscape ? "Landscape" : "Portrait")}" : (landscape ? "Landscape" : "Portrait"))} | " +
             $"Target: {result.TargetWidthMm:0.0} x {result.TargetHeightMm:0.0} mm | " +
             $"Scaling: {scaling} | Position: {positionMode} | " +
             $"Graphics PageUnit(orig): {originalPageUnit} | DPI: {dpiX:0}x{dpiY:0} | " +

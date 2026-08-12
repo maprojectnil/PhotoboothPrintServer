@@ -590,9 +590,9 @@ public partial class MainForm : Form
             cmbColorMode.SelectedIndex = cIdx >= 0 ? cIdx : 0;
             profile.ColorMode = cmbColorMode.SelectedIndex == 0;
 
-            // --- Orientation ---
+            // --- Orientation (Portrait/Landscape manual, atau Auto - lihat ProfileControl_Changed) ---
             cmbOrientation.Enabled = true;
-            cmbOrientation.SelectedIndex = profile.Landscape ? 1 : 0;
+            cmbOrientation.SelectedIndex = profile.OrientationAuto ? 2 : (profile.Landscape ? 1 : 0);
 
             // --- Print Size (fisik, terpisah dari Paper Size - lihat PrintSizeProfile) ---
             cmbPrintSize.Items.Clear();
@@ -674,7 +674,21 @@ public partial class MainForm : Form
         profile.PaperSizeName = cmbPaperSize.SelectedItem?.ToString() ?? string.Empty;
         profile.PrintQuality = cmbPrintQuality.SelectedItem is PrintQualityLevel level ? level : PrintQualityLevel.High;
         profile.ColorMode = cmbColorMode.SelectedIndex <= 0; // index 0 = "Color"
-        profile.Landscape = cmbOrientation.SelectedIndex == 1; // index 1 = "Landscape"
+
+        // Orientation: index 0 = Portrait, 1 = Landscape, 2 = Auto (per-foto berdasarkan
+        // aspect ratio gambar saat dicetak - lihat ImagePrintService.ResolveLandscape).
+        // Saat Auto dipilih, profile.Landscape SENGAJA tidak disentuh supaya preferensi
+        // manual terakhir tetap ada kalau user beralih balik ke Portrait/Landscape.
+        if (cmbOrientation.SelectedIndex == 2)
+        {
+            profile.OrientationAuto = true;
+        }
+        else
+        {
+            profile.OrientationAuto = false;
+            profile.Landscape = cmbOrientation.SelectedIndex == 1;
+        }
+
         profile.Borderless = chkBorderless.Checked;
         ApplySelectedPaperTypeToProfile(profile);
 
@@ -694,7 +708,7 @@ public partial class MainForm : Form
         AppendLog($"Printer Profile '{printerName}' disimpan " +
                    $"(Paper: {profile.PaperSizeName}, Quality: {profile.PrintQuality}, " +
                    $"Color: {(profile.ColorMode ? "Color" : "Monochrome")}, " +
-                   $"Orientation: {(profile.Landscape ? "Landscape" : "Portrait")}, " +
+                   $"Orientation: {(profile.OrientationAuto ? "Auto" : (profile.Landscape ? "Landscape" : "Portrait"))}, " +
                    $"Borderless: {profile.Borderless}, " +
                    $"Paper Type: {(string.IsNullOrEmpty(profile.MediaTypeName) ? "Driver Default" : profile.MediaTypeName)}, " +
                    $"Print Size: {profile.PrintSizeName} [{profile.PrintWidthMm:0.#} x {profile.PrintHeightMm:0.#} mm], " +

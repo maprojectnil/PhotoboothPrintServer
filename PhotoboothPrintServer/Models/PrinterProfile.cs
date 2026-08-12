@@ -38,6 +38,17 @@ public class PrinterProfile
     /// <summary>true = Landscape, false = Portrait.</summary>
     public bool Landscape { get; set; } = false;
 
+    /// <summary>
+    /// true = orientasi ditentukan otomatis per foto berdasarkan aspect ratio gambar saat
+    /// dicetak (lebar &gt; tinggi -&gt; Landscape, selain itu Portrait) - lihat
+    /// ImagePrintService.ResolveLandscape. Saat true, nilai <see cref="Landscape"/> di atas
+    /// diabaikan untuk keperluan print (tetap tersimpan sebagai preferensi manual terakhir
+    /// kalau user beralih balik dari Auto). Default false supaya profil lama (JSON tanpa
+    /// field ini) tetap berperilaku PERSIS seperti sebelumnya - manual Portrait/Landscape
+    /// lewat <see cref="Landscape"/>, tidak ada perubahan hasil cetak untuk profil existing.
+    /// </summary>
+    public bool OrientationAuto { get; set; } = false;
+
     // ===================== Physical Print Size (perbaikan printing) =====================
 
     /// <summary>

@@ -218,7 +218,7 @@ public class PrintManager
     {
         string paper = string.IsNullOrWhiteSpace(profile.PaperSizeName) ? "-" : profile.PaperSizeName;
         string color = profile.ColorMode ? "Color" : "Monochrome";
-        string orientation = profile.Landscape ? "Landscape" : "Portrait";
+        string orientation = profile.OrientationAuto ? "Auto" : (profile.Landscape ? "Landscape" : "Portrait");
         string borderless = profile.Borderless ? ", Borderless" : "";
         string printSize = string.IsNullOrWhiteSpace(profile.PrintSizeName)
             ? ""
