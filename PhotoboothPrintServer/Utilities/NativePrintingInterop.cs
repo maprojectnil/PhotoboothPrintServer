@@ -40,6 +40,9 @@ internal static class NativePrintingInterop
     [DllImport("kernel32.dll")]
     private static extern bool GlobalUnlock(IntPtr hMem);
 
+    [DllImport("kernel32.dll")]
+    private static extern IntPtr GlobalFree(IntPtr hMem);
+
     /// <summary>
     /// Layout DEVMODE (bagian tetap, tanpa data ekstra privat driver di belakangnya) sesuai
     /// definisi resmi Win32 wingdi.h. Dipakai HANYA untuk menghitung offset field
@@ -207,6 +210,45 @@ internal static class NativePrintingInterop
         finally
         {
             GlobalUnlock(hDevMode);
+        }
+    }
+
+    /// <summary>
+    /// Menerapkan Paper Type/Media Type ke sebuah PrintDocument yang sedang dikonfigurasi:
+    /// mengambil DEVMODE mentahnya (PrinterSettings.GetHdevmode), menulis dmMediaType lewat
+    /// TryPatchMediaType, lalu mengembalikannya via SetHdevmode supaya driver benar-benar
+    /// menerima nilainya saat job dikirim ke spooler. mediaTypeId &lt; 0 berarti "Driver
+    /// Default" - tidak ada yang diterapkan (perilaku lama tidak berubah). Best-effort: gagal
+    /// di sini tidak pernah melempar exception ke caller, hanya mengembalikan false.
+    /// </summary>
+    public static bool ApplyMediaType(
+        System.Drawing.Printing.PrinterSettings settings,
+        System.Drawing.Printing.PageSettings pageSettings,
+        int mediaTypeId,
+        out string? error)
+    {
+        error = null;
+        if (mediaTypeId < 0) return true; // Driver Default - tidak ada override
+
+        IntPtr hDevMode = IntPtr.Zero;
+        try
+        {
+            hDevMode = settings.GetHdevmode(pageSettings);
+
+            if (!TryPatchMediaType(hDevMode, mediaTypeId, out error))
+                return false;
+
+            settings.SetHdevmode(hDevMode);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            error = ex.Message;
+            return false;
+        }
+        finally
+        {
+            if (hDevMode != IntPtr.Zero) GlobalFree(hDevMode);
         }
     }
 }

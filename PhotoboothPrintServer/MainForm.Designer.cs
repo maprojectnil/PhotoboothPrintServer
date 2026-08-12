@@ -56,6 +56,8 @@ partial class MainForm
     private TextBox txtCustomWidthMm = null!;
     private Label lblCustomSizeSeparator = null!;
     private TextBox txtCustomHeightMm = null!;
+    private Label lblPaperTypeCaption = null!;
+    private ComboBox cmbPaperType = null!;
     private Label lblProfileInfoCaption = null!;
     private Label lblProfileInfoValue = null!;
 
@@ -77,6 +79,15 @@ partial class MainForm
     private GroupBox grpLog = null!;
     private TextBox txtLog = null!;
 
+    // Undock/float grip ("≡") - satu per panel, memungkinkan panel dilepas ke jendela terpisah.
+    private ToolTip tooltipUndock = null!;
+    private Button btnUndockServer = null!;
+    private Button btnUndockPrinter = null!;
+    private Button btnUndockPrinterProfile = null!;
+    private Button btnUndockQueue = null!;
+    private Button btnUndockHistory = null!;
+    private Button btnUndockLog = null!;
+
     private NotifyIcon trayIcon = null!;
     private ContextMenuStrip trayMenu = null!;
     private ToolStripMenuItem trayMenuOpen = null!;
@@ -89,7 +100,10 @@ partial class MainForm
     {
         lblTitle = new Label();
 
+        tooltipUndock = new ToolTip();
+
         grpServer = new GroupBox();
+        btnUndockServer = new Button();
         lblServerStatusCaption = new Label();
         lblServerStatusValue = new Label();
         lblIpCaption = new Label();
@@ -103,6 +117,7 @@ partial class MainForm
         btnToggleServer = new Button();
 
         grpPrinter = new GroupBox();
+        btnUndockPrinter = new Button();
         lblPrinterCaption = new Label();
         cmbPrinters = new ComboBox();
         btnRefresh = new Button();
@@ -111,6 +126,7 @@ partial class MainForm
         btnTestPrint = new Button();
 
         grpPrinterProfile = new GroupBox();
+        btnUndockPrinterProfile = new Button();
         lblPaperSizeCaption = new Label();
         cmbPaperSize = new ComboBox();
         lblPrintQualityCaption = new Label();
@@ -130,10 +146,13 @@ partial class MainForm
         txtCustomWidthMm = new TextBox();
         lblCustomSizeSeparator = new Label();
         txtCustomHeightMm = new TextBox();
+        lblPaperTypeCaption = new Label();
+        cmbPaperType = new ComboBox();
         lblProfileInfoCaption = new Label();
         lblProfileInfoValue = new Label();
 
         grpQueue = new GroupBox();
+        btnUndockQueue = new Button();
         lblQueueLengthCaption = new Label();
         lblQueueLengthValue = new Label();
         lblCurrentJobCaption = new Label();
@@ -145,10 +164,12 @@ partial class MainForm
         lvQueue = new ListView();
 
         grpHistory = new GroupBox();
+        btnUndockHistory = new Button();
         btnClearHistory = new Button();
         lvHistory = new ListView();
 
         grpLog = new GroupBox();
+        btnUndockLog = new Button();
         txtLog = new TextBox();
 
         trayIcon = new NotifyIcon();
@@ -170,6 +191,19 @@ partial class MainForm
         grpServer.Location = new Point(20, 55);
         grpServer.Size = new Size(680, 155);
         grpServer.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
+
+        btnUndockServer.Text = "☰";
+        btnUndockServer.Font = new Font("Segoe UI", 10, FontStyle.Bold);
+        btnUndockServer.Location = new Point(grpServer.Width - 34, 2);
+        btnUndockServer.Size = new Size(28, 22);
+        btnUndockServer.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+        btnUndockServer.FlatStyle = FlatStyle.Flat;
+        btnUndockServer.FlatAppearance.BorderSize = 0;
+        btnUndockServer.Cursor = Cursors.Hand;
+        btnUndockServer.TabStop = false;
+        btnUndockServer.Tag = grpServer;
+        btnUndockServer.Click += UndockButton_Click;
+        tooltipUndock.SetToolTip(btnUndockServer, "Undock panel ini ke jendela terpisah");
 
         lblServerStatusCaption.Text = "Status Server:";
         lblServerStatusCaption.Location = new Point(15, 25);
@@ -233,12 +267,26 @@ partial class MainForm
         grpServer.Controls.Add(lblMdnsCaption);
         grpServer.Controls.Add(lblMdnsValue);
         grpServer.Controls.Add(btnToggleServer);
+        grpServer.Controls.Add(btnUndockServer);
 
         // grpPrinter
         grpPrinter.Text = "Printer";
         grpPrinter.Location = new Point(20, 220);
         grpPrinter.Size = new Size(680, 150);
         grpPrinter.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
+
+        btnUndockPrinter.Text = "☰";
+        btnUndockPrinter.Font = new Font("Segoe UI", 10, FontStyle.Bold);
+        btnUndockPrinter.Location = new Point(grpPrinter.Width - 34, 2);
+        btnUndockPrinter.Size = new Size(28, 22);
+        btnUndockPrinter.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+        btnUndockPrinter.FlatStyle = FlatStyle.Flat;
+        btnUndockPrinter.FlatAppearance.BorderSize = 0;
+        btnUndockPrinter.Cursor = Cursors.Hand;
+        btnUndockPrinter.TabStop = false;
+        btnUndockPrinter.Tag = grpPrinter;
+        btnUndockPrinter.Click += UndockButton_Click;
+        tooltipUndock.SetToolTip(btnUndockPrinter, "Undock panel ini ke jendela terpisah");
 
         lblPrinterCaption.Text = "Printer Aktif:";
         lblPrinterCaption.Location = new Point(15, 28);
@@ -275,12 +323,26 @@ partial class MainForm
         grpPrinter.Controls.Add(lblPrinterStatusCaption);
         grpPrinter.Controls.Add(lblPrinterStatusValue);
         grpPrinter.Controls.Add(btnTestPrint);
+        grpPrinter.Controls.Add(btnUndockPrinter);
 
         // grpPrinterProfile
         grpPrinterProfile.Text = "Printer Profile";
         grpPrinterProfile.Location = new Point(20, 380);
-        grpPrinterProfile.Size = new Size(680, 250);
+        grpPrinterProfile.Size = new Size(680, 285);
         grpPrinterProfile.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
+
+        btnUndockPrinterProfile.Text = "☰";
+        btnUndockPrinterProfile.Font = new Font("Segoe UI", 10, FontStyle.Bold);
+        btnUndockPrinterProfile.Location = new Point(grpPrinterProfile.Width - 34, 2);
+        btnUndockPrinterProfile.Size = new Size(28, 22);
+        btnUndockPrinterProfile.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+        btnUndockPrinterProfile.FlatStyle = FlatStyle.Flat;
+        btnUndockPrinterProfile.FlatAppearance.BorderSize = 0;
+        btnUndockPrinterProfile.Cursor = Cursors.Hand;
+        btnUndockPrinterProfile.TabStop = false;
+        btnUndockPrinterProfile.Tag = grpPrinterProfile;
+        btnUndockPrinterProfile.Click += UndockButton_Click;
+        tooltipUndock.SetToolTip(btnUndockPrinterProfile, "Undock panel ini ke jendela terpisah");
 
         lblPaperSizeCaption.Text = "Paper Size:";
         lblPaperSizeCaption.Location = new Point(15, 28);
@@ -375,12 +437,24 @@ partial class MainForm
         txtCustomHeightMm.Visible = false;
         txtCustomHeightMm.TextChanged += ProfileControl_Changed;
 
+        // --- Paper Type / Media Type (Glossy, Matte, Plain, dst.) - hanya opsi yang benar-benar
+        // dilaporkan driver printer aktif via DeviceCapabilities, plus "Driver Default" untuk
+        // tidak meng-override sama sekali (banyak printer non-foto tidak melaporkan apa pun).
+        lblPaperTypeCaption.Text = "Paper Type:";
+        lblPaperTypeCaption.Location = new Point(15, 203);
+        lblPaperTypeCaption.AutoSize = true;
+
+        cmbPaperType.Location = new Point(150, 200);
+        cmbPaperType.Size = new Size(335, 25);
+        cmbPaperType.DropDownStyle = ComboBoxStyle.DropDownList;
+        cmbPaperType.SelectedIndexChanged += ProfileControl_Changed;
+
         lblProfileInfoCaption.Text = "Info:";
-        lblProfileInfoCaption.Location = new Point(15, 205);
+        lblProfileInfoCaption.Location = new Point(15, 240);
         lblProfileInfoCaption.AutoSize = true;
 
         lblProfileInfoValue.Text = "-";
-        lblProfileInfoValue.Location = new Point(150, 205);
+        lblProfileInfoValue.Location = new Point(150, 240);
         lblProfileInfoValue.AutoSize = true;
         lblProfileInfoValue.Font = new Font("Segoe UI", 8.5F, FontStyle.Italic);
         lblProfileInfoValue.ForeColor = Color.DimGray;
@@ -404,14 +478,30 @@ partial class MainForm
         grpPrinterProfile.Controls.Add(txtCustomWidthMm);
         grpPrinterProfile.Controls.Add(lblCustomSizeSeparator);
         grpPrinterProfile.Controls.Add(txtCustomHeightMm);
+        grpPrinterProfile.Controls.Add(lblPaperTypeCaption);
+        grpPrinterProfile.Controls.Add(cmbPaperType);
         grpPrinterProfile.Controls.Add(lblProfileInfoCaption);
         grpPrinterProfile.Controls.Add(lblProfileInfoValue);
+        grpPrinterProfile.Controls.Add(btnUndockPrinterProfile);
 
         // grpQueue
         grpQueue.Text = "HTTP API && Print Queue";
-        grpQueue.Location = new Point(20, 640);
+        grpQueue.Location = new Point(20, 675);
         grpQueue.Size = new Size(680, 240);
         grpQueue.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
+
+        btnUndockQueue.Text = "☰";
+        btnUndockQueue.Font = new Font("Segoe UI", 10, FontStyle.Bold);
+        btnUndockQueue.Location = new Point(grpQueue.Width - 34, 2);
+        btnUndockQueue.Size = new Size(28, 22);
+        btnUndockQueue.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+        btnUndockQueue.FlatStyle = FlatStyle.Flat;
+        btnUndockQueue.FlatAppearance.BorderSize = 0;
+        btnUndockQueue.Cursor = Cursors.Hand;
+        btnUndockQueue.TabStop = false;
+        btnUndockQueue.Tag = grpQueue;
+        btnUndockQueue.Click += UndockButton_Click;
+        tooltipUndock.SetToolTip(btnUndockQueue, "Undock panel ini ke jendela terpisah");
 
         lblQueueLengthCaption.Text = "Queue Length:";
         lblQueueLengthCaption.Location = new Point(15, 25);
@@ -470,12 +560,26 @@ partial class MainForm
         grpQueue.Controls.Add(lblTotalFailedCaption);
         grpQueue.Controls.Add(lblTotalFailedValue);
         grpQueue.Controls.Add(lvQueue);
+        grpQueue.Controls.Add(btnUndockQueue);
 
         // grpHistory
         grpHistory.Text = "Print History";
-        grpHistory.Location = new Point(20, 890);
+        grpHistory.Location = new Point(20, 925);
         grpHistory.Size = new Size(680, 230);
         grpHistory.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
+
+        btnUndockHistory.Text = "☰";
+        btnUndockHistory.Font = new Font("Segoe UI", 10, FontStyle.Bold);
+        btnUndockHistory.Location = new Point(grpHistory.Width - 34, 2);
+        btnUndockHistory.Size = new Size(28, 22);
+        btnUndockHistory.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+        btnUndockHistory.FlatStyle = FlatStyle.Flat;
+        btnUndockHistory.FlatAppearance.BorderSize = 0;
+        btnUndockHistory.Cursor = Cursors.Hand;
+        btnUndockHistory.TabStop = false;
+        btnUndockHistory.Tag = grpHistory;
+        btnUndockHistory.Click += UndockButton_Click;
+        tooltipUndock.SetToolTip(btnUndockHistory, "Undock panel ini ke jendela terpisah");
 
         btnClearHistory.Text = "Clear History";
         btnClearHistory.Location = new Point(515, 24);
@@ -501,12 +605,26 @@ partial class MainForm
 
         grpHistory.Controls.Add(btnClearHistory);
         grpHistory.Controls.Add(lvHistory);
+        grpHistory.Controls.Add(btnUndockHistory);
 
         // grpLog
         grpLog.Text = "Log";
-        grpLog.Location = new Point(20, 1130);
+        grpLog.Location = new Point(20, 1165);
         grpLog.Size = new Size(680, 150);
         grpLog.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
+
+        btnUndockLog.Text = "☰";
+        btnUndockLog.Font = new Font("Segoe UI", 10, FontStyle.Bold);
+        btnUndockLog.Location = new Point(grpLog.Width - 34, 2);
+        btnUndockLog.Size = new Size(28, 22);
+        btnUndockLog.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+        btnUndockLog.FlatStyle = FlatStyle.Flat;
+        btnUndockLog.FlatAppearance.BorderSize = 0;
+        btnUndockLog.Cursor = Cursors.Hand;
+        btnUndockLog.TabStop = false;
+        btnUndockLog.Tag = grpLog;
+        btnUndockLog.Click += UndockButton_Click;
+        tooltipUndock.SetToolTip(btnUndockLog, "Undock panel ini ke jendela terpisah");
 
         txtLog.Location = new Point(15, 25);
         txtLog.Size = new Size(650, 110);
@@ -517,6 +635,7 @@ partial class MainForm
         txtLog.Font = new Font("Consolas", 9);
 
         grpLog.Controls.Add(txtLog);
+        grpLog.Controls.Add(btnUndockLog);
 
         // trayMenu
         trayMenuOpen.Text = "Open";
@@ -553,7 +672,7 @@ partial class MainForm
         // MainForm
         AutoScaleMode = AutoScaleMode.Font;
         AutoScroll = true;
-        ClientSize = new Size(720, 980);
+        ClientSize = new Size(720, 1015);
         MinimumSize = new Size(680, 500);
         Text = "Photobooth Print Server";
         StartPosition = FormStartPosition.CenterScreen;

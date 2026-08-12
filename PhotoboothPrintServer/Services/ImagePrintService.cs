@@ -41,7 +41,7 @@ public class ImagePrintService
                     $"Printer '{printerName}' tidak tersedia / tidak terhubung.");
             }
 
-            ApplyProfile(doc, profile);
+            ApplyProfile(doc, profile, log);
 
             doc.PrintPage += (sender, e) => DrawImagePage(e, image, profile, log);
             doc.Print();
@@ -52,7 +52,7 @@ public class ImagePrintService
     /// Menerapkan Printer Profile ke PrintDocument. Setiap opsi hanya diterapkan jika
     /// benar-benar tersedia di driver printer yang aktif (tidak dipaksakan).
     /// </summary>
-    private static void ApplyProfile(PrintDocument doc, PrinterProfile? profile)
+    private static void ApplyProfile(PrintDocument doc, PrinterProfile? profile, Action<string>? log = null)
     {
         if (profile == null) return; // fallback ke default driver (perilaku Fase 1/2)
 
@@ -93,6 +93,19 @@ public class ImagePrintService
         if (profile.Borderless)
         {
             pageSettings.Margins = new Margins(0, 0, 0, 0);
+        }
+
+        // Paper Type / Media Type - System.Drawing.Printing tidak punya abstraksi untuk ini,
+        // jadi diterapkan langsung ke DEVMODE mentah lewat NativePrintingInterop. Best-effort:
+        // MediaTypeId < 0 ("Driver Default") tidak melakukan apa pun; kegagalan pada driver
+        // tertentu di-log tapi tidak menggagalkan print job (paper size/quality tetap jalan).
+        if (profile.MediaTypeId >= 0)
+        {
+            if (!NativePrintingInterop.ApplyMediaType(settings, pageSettings, profile.MediaTypeId, out var mediaTypeError))
+            {
+                log?.Invoke($"Warning: Paper Type '{profile.MediaTypeName}' gagal diterapkan ke driver " +
+                            $"({mediaTypeError ?? "unknown error"}). Job tetap dicetak dengan tipe kertas default driver.");
+            }
         }
     }
 

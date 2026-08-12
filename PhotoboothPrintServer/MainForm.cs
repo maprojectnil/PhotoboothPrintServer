@@ -28,6 +28,12 @@ public partial class MainForm : Form
     private bool _isExiting;
     private Color? _lastTrayColor;
 
+    // Undock/float panel (setiap GroupBox utama bisa dilepas ke jendela terpisah lewat
+    // tombol "☰" - lihat UndockButton_Click). _dockedLayout menyimpan posisi/ukuran asli
+    // panel di MainForm supaya bisa dikembalikan persis saat di-redock.
+    private readonly Dictionary<GroupBox, (Point Location, Size Size)> _dockedLayout = new();
+    private readonly Dictionary<GroupBox, Form> _floatingPanels = new();
+
     public MainForm()
     {
         InitializeComponent();
@@ -506,6 +512,9 @@ public partial class MainForm : Form
             cmbPosition.Items.Clear();
             cmbPosition.Enabled = false;
 
+            cmbPaperType.Items.Clear();
+            cmbPaperType.Enabled = false;
+
             txtCustomWidthMm.Text = string.Empty;
             txtCustomHeightMm.Text = string.Empty;
             SetCustomSizeFieldsVisible(false);
@@ -623,6 +632,24 @@ public partial class MainForm : Form
             chkBorderless.Enabled = true;
             chkBorderless.Checked = profile.Borderless;
 
+            // --- Paper Type / Media Type: "Driver Default" + hanya tipe yang benar-benar
+            // dilaporkan driver printer aktif (banyak printer non-foto tidak melaporkan apa
+            // pun lewat DeviceCapabilities - itu normal, combo tetap enabled dengan 1 opsi).
+            cmbPaperType.Items.Clear();
+            cmbPaperType.Items.Add("Driver Default");
+            foreach (var mediaType in _currentCapabilities.MediaTypes)
+                cmbPaperType.Items.Add(mediaType.Name);
+
+            cmbPaperType.Enabled = true;
+            int mtIdx = 0;
+            if (profile.MediaTypeId >= 0)
+            {
+                int found = _currentCapabilities.MediaTypes.FindIndex(m => m.Id == profile.MediaTypeId);
+                if (found >= 0) mtIdx = found + 1; // +1 karena index 0 = "Driver Default"
+            }
+            cmbPaperType.SelectedIndex = mtIdx;
+            ApplySelectedPaperTypeToProfile(profile);
+
             lblProfileInfoValue.Text =
                 $"{_currentCapabilities.PaperSizes.Count} paper size terdeteksi  |  " +
                 (_currentCapabilities.SupportsColor ? "Color printer" : "Monochrome printer");
@@ -649,6 +676,7 @@ public partial class MainForm : Form
         profile.ColorMode = cmbColorMode.SelectedIndex <= 0; // index 0 = "Color"
         profile.Landscape = cmbOrientation.SelectedIndex == 1; // index 1 = "Landscape"
         profile.Borderless = chkBorderless.Checked;
+        ApplySelectedPaperTypeToProfile(profile);
 
         // --- Print Size / Scaling / Position (perbaikan physical-size printing) ---
         ApplySelectedPrintSizeToProfile(profile);
@@ -668,6 +696,7 @@ public partial class MainForm : Form
                    $"Color: {(profile.ColorMode ? "Color" : "Monochrome")}, " +
                    $"Orientation: {(profile.Landscape ? "Landscape" : "Portrait")}, " +
                    $"Borderless: {profile.Borderless}, " +
+                   $"Paper Type: {(string.IsNullOrEmpty(profile.MediaTypeName) ? "Driver Default" : profile.MediaTypeName)}, " +
                    $"Print Size: {profile.PrintSizeName} [{profile.PrintWidthMm:0.#} x {profile.PrintHeightMm:0.#} mm], " +
                    $"Scaling: {profile.Scaling}, Position: {profile.Position}).");
     }
@@ -726,6 +755,101 @@ public partial class MainForm : Form
         double.TryParse(text, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out double v) && v > 0
             ? v
             : 0;
+
+    /// <summary>
+    /// Menyinkronkan pilihan cmbPaperType ke PrinterProfile. Index 0 selalu "Driver Default"
+    /// (MediaTypeId = -1, tidak di-override). Index >= 1 memetakan ke
+    /// _currentCapabilities.MediaTypes[index - 1] - lihat LoadPrinterProfileUi untuk cara
+    /// combo ini diisi.
+    /// </summary>
+    private void ApplySelectedPaperTypeToProfile(PrinterProfile profile)
+    {
+        int idx = cmbPaperType.SelectedIndex;
+        int mediaIdx = idx - 1;
+
+        if (idx <= 0 || mediaIdx < 0 || mediaIdx >= _currentCapabilities.MediaTypes.Count)
+        {
+            profile.MediaTypeId = -1;
+            profile.MediaTypeName = string.Empty;
+            return;
+        }
+
+        var selected = _currentCapabilities.MediaTypes[mediaIdx];
+        profile.MediaTypeId = selected.Id;
+        profile.MediaTypeName = selected.Name;
+    }
+
+    // ===================== Undock/Float Panel =====================
+
+    /// <summary>
+    /// Handler tombol "☰" di pojok kanan-atas tiap panel (GroupBox). Klik pertama melepas
+    /// panel ke jendela terpisah (float); klik lagi (atau tutup jendela float-nya) akan
+    /// mengembalikannya persis ke posisi/ukuran semula di MainForm.
+    /// </summary>
+    private void UndockButton_Click(object? sender, EventArgs e)
+    {
+        if (sender is not Button btn || btn.Tag is not GroupBox panel) return;
+        ToggleDock(panel);
+    }
+
+    private void ToggleDock(GroupBox panel)
+    {
+        if (_floatingPanels.TryGetValue(panel, out var floatingForm) && !floatingForm.IsDisposed)
+        {
+            // Sudah mengambang -> menutup jendelanya akan memicu redock lewat FormClosed.
+            floatingForm.Close();
+            return;
+        }
+
+        Undock(panel);
+    }
+
+    private void Undock(GroupBox panel)
+    {
+        if (!_dockedLayout.ContainsKey(panel))
+            _dockedLayout[panel] = (panel.Location, panel.Size);
+
+        var dockedSize = _dockedLayout[panel].Size;
+
+        var floatingForm = new Form
+        {
+            Text = string.IsNullOrWhiteSpace(panel.Text) ? "Panel" : panel.Text,
+            StartPosition = FormStartPosition.Manual,
+            FormBorderStyle = FormBorderStyle.Sizable,
+            MinimizeBox = false,
+            MaximizeBox = false,
+            ShowInTaskbar = false,
+            ClientSize = dockedSize,
+            MinimumSize = new Size(Math.Min(260, dockedSize.Width), Math.Min(150, dockedSize.Height)),
+        };
+
+        // Muncul di dekat posisi panel di MainForm (bukan menumpuk persis di tengah layar).
+        var screenPoint = PointToScreen(new Point(panel.Left, panel.Top));
+        floatingForm.Location = new Point(screenPoint.X + 30, screenPoint.Y + 30);
+
+        panel.Dock = DockStyle.Fill;
+        panel.Parent = floatingForm;
+
+        floatingForm.FormClosed += (_, _) =>
+        {
+            _floatingPanels.Remove(panel);
+            Redock(panel);
+        };
+
+        _floatingPanels[panel] = floatingForm;
+        floatingForm.Show(this);
+    }
+
+    private void Redock(GroupBox panel)
+    {
+        if (panel.IsDisposed) return;
+        if (!_dockedLayout.TryGetValue(panel, out var original)) return;
+
+        panel.Dock = DockStyle.None;
+        panel.Parent = this;
+        panel.Location = original.Location;
+        panel.Size = original.Size;
+    }
 
     private async void btnTestPrint_Click(object? sender, EventArgs e)
     {

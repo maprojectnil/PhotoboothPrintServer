@@ -24,6 +24,17 @@ public class PrinterProfile
     /// <summary>true = Color, false = Monochrome. Hanya diterapkan jika printer mendukung warna.</summary>
     public bool ColorMode { get; set; } = true;
 
+    /// <summary>
+    /// Paper Type / Media Type (mis. Glossy Photo Paper, Matte, Plain Paper) - id numerik
+    /// mentah driver dari PrinterMediaType.Id (lihat NativePrintingInterop.EnumerateMediaTypes).
+    /// -1 = "Driver Default" (tidak di-override, perilaku lama/backward compatible untuk
+    /// profil yang tersimpan sebelum fitur ini ada).
+    /// </summary>
+    public int MediaTypeId { get; set; } = -1;
+
+    /// <summary>Nama tampilan Paper Type yang dipilih (untuk log/UI). Kosong jika Driver Default.</summary>
+    public string MediaTypeName { get; set; } = string.Empty;
+
     /// <summary>true = Landscape, false = Portrait.</summary>
     public bool Landscape { get; set; } = false;
 
