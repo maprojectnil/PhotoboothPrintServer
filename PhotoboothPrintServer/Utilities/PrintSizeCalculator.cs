@@ -141,4 +141,71 @@ public static class PrintSizeCalculator
             _ => (reference.X + (reference.Width - drawWidth) / 2.0, reference.Y + (reference.Height - drawHeight) / 2.0),
         };
     }
+
+    /// <summary>
+    /// FIX borderless: "cover + bleed", BUKAN letterbox. Dipakai HANYA saat
+    /// PrinterProfile.Borderless == true, menggantikan (override) ScalingMode apa pun yang
+    /// dipilih user, karena tujuannya berbeda secara fundamental dari FitToPage/
+    /// FitToPrintableArea/ActualSize:
+    ///
+    /// - FitToPage/FitToPrintableArea = "contain" (letterbox): gambar SELALU utuh terlihat,
+    ///   tapi kalau aspect ratio tidak pas -&gt; muncul tepi putih. Tidak cocok untuk borderless.
+    /// - ActualSize = ukuran fisik persis, tidak pernah dikecilkan; kalau melebihi printable
+    ///   area (hard margin printer/driver), sisanya betul-betul di-clip oleh printer -&gt;
+    ///   itulah penyebab "kepotong" yang dilaporkan.
+    /// - CalculateBorderlessFill = "cover": gambar diperbesar sampai MENUTUPI PENUH target
+    ///   area (targetAreaMm) DITAMBAH bleed (mm) di semua sisi. Bleed sengaja dibuat lebih
+    ///   besar dari sisa hard margin driver (lihat caller di ImagePrintService), jadi bagian
+    ///   yang "dipotong" oleh hardware printer PASTI cuma bleed (area ekstra yang sengaja
+    ///   digambar melebihi target), TIDAK PERNAH memakan konten foto inti di dalam
+    ///   targetAreaMm. Efek samping: kalau aspect ratio foto beda dari target (mis. foto 3:4
+    ///   dicetak ke kertas 2:3), sedikit sisi foto ikut ter-crop supaya tidak ada tepi putih -
+    ///   ini standar cetak borderless di percetakan manapun, bukan bug.
+    /// </summary>
+    /// <param name="pageBoundsMm">Full page/paper area (mm), acuan penempatan target (sama seperti ActualSize).</param>
+    /// <param name="targetWidthMm">Lebar fisik target print (mm), sudah memperhitungkan orientasi.</param>
+    /// <param name="targetHeightMm">Tinggi fisik target print (mm), sudah memperhitungkan orientasi.</param>
+    /// <param name="bleedMm">
+    /// Ekstra ukuran (mm) di SETIAP sisi di luar targetWidthMm/targetHeightMm. Caller wajib
+    /// mengisinya berdasarkan hard margin printer yang terukur (lihat ImagePrintService.
+    /// DrawImagePage) + toleransi kecil, supaya area yang di-clip printer selalu berada di
+    /// dalam bleed, bukan di dalam target asli.
+    /// </param>
+    public static DrawResult CalculateBorderlessFill(
+        RectMm pageBoundsMm, double targetWidthMm, double targetHeightMm, double bleedMm,
+        double imageAspectRatio, PositionParams position)
+    {
+        // Posisi target dasar (sebelum bleed) dihitung sama persis seperti ActualSize -
+        // supaya perilaku Position (Center/TopLeft/Custom) konsisten antar mode.
+        var (targetX, targetY) = ComputePosition(pageBoundsMm, targetWidthMm, targetHeightMm, position);
+
+        var bleedArea = new RectMm(
+            targetX - bleedMm,
+            targetY - bleedMm,
+            targetWidthMm + bleedMm * 2.0,
+            targetHeightMm + bleedMm * 2.0);
+
+        if (bleedArea.Width <= 0 || bleedArea.Height <= 0 || imageAspectRatio <= 0)
+            return new DrawResult(bleedArea, Math.Max(bleedArea.Width, 0), Math.Max(bleedArea.Height, 0), false);
+
+        double boundsRatio = bleedArea.Width / bleedArea.Height;
+
+        // COVER (kebalikan dari CalculateFitToBounds yang "contain"): gambar dibesarkan
+        // sampai sisi TERPENDEKnya menutupi bleedArea, sisi lain melebihi bleedArea (nanti
+        // otomatis terpotong oleh GDI/printer di luar halaman - itu memang tujuannya).
+        double drawWidth, drawHeight;
+        if (imageAspectRatio > boundsRatio)
+        {
+            drawHeight = bleedArea.Height;
+            drawWidth = bleedArea.Height * imageAspectRatio;
+        }
+        else
+        {
+            drawWidth = bleedArea.Width;
+            drawHeight = bleedArea.Width / imageAspectRatio;
+        }
+
+        var (x, y) = ComputePosition(bleedArea, drawWidth, drawHeight, position);
+        return new DrawResult(new RectMm(x, y, drawWidth, drawHeight), targetWidthMm, targetHeightMm, false);
+    }
 }

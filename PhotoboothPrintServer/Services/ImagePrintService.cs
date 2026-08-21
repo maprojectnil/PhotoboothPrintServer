@@ -59,8 +59,33 @@ public class ImagePrintService
         var settings = doc.PrinterSettings;
         var pageSettings = doc.DefaultPageSettings;
 
-        // Paper Size - hanya diterapkan jika nama persis tersedia di driver.
-        if (!string.IsNullOrWhiteSpace(profile.PaperSizeName))
+        // REVISI (setelah dikonfirmasi lewat pengetesan nyata): untuk driver Epson (dan
+        // kebanyakan printer foto consumer), toggle Borderless yang SESUNGGUHNYA tersimpan di
+        // data privat/vendor-specific milik driver (DEVMODE extension) yang TIDAK terekspos
+        // lewat System.Drawing.Printing sama sekali - HardMarginX/Y yang dibaca .NET untuk
+        // Paper Size TIDAK berubah walau Borderless aktif/nonaktif di driver, jadi TIDAK BISA
+        // dipakai sebagai sinyal "apakah driver ini sudah borderless". Auto-select di bawah
+        // masih berguna untuk driver LAIN yang memang punya entri Paper Size terpisah untuk
+        // borderless (mis. beberapa driver Canon/HP), tapi untuk Epson biasanya cuma ada SATU
+        // entri per ukuran fisik - jadi jangan berharap ini "menyalakan" borderless sendirian.
+        bool borderlessPaperAutoSelected = false;
+        if (profile.Borderless && profile.PrintWidthMm > 0 && profile.PrintHeightMm > 0 &&
+            TryFindBestBorderlessPaperSize(settings, profile.PrintWidthMm, profile.PrintHeightMm,
+                out var autoPaper, out var autoHmX, out var autoHmY))
+        {
+            pageSettings.PaperSize = autoPaper;
+            borderlessPaperAutoSelected = true;
+            log?.Invoke(
+                $"Borderless: Paper Size '{autoPaper!.PaperName}' dipakai untuk target " +
+                $"{profile.PrintWidthMm:0.0} x {profile.PrintHeightMm:0.0} mm " +
+                $"(hard margin terlapor {autoHmX:0.00} x {autoHmY:0.00} mm - " +
+                "ANGKA INI TIDAK MENJAMIN status borderless sesungguhnya untuk driver Epson, " +
+                "lihat catatan di bawah).");
+        }
+
+        // Paper Size manual - dipakai kalau bukan mode borderless (atau auto-select borderless
+        // di atas gagal menemukan kandidat sama sekali), sama seperti perilaku lama.
+        if (!borderlessPaperAutoSelected && !string.IsNullOrWhiteSpace(profile.PaperSizeName))
         {
             foreach (PaperSize size in settings.PaperSizes)
             {
@@ -91,7 +116,16 @@ public class ImagePrintService
         }
 
         // Borderless - best-effort dengan menghilangkan margin cetak.
-        // Hasil akhir full-bleed tetap tergantung dukungan driver/paper size printer.
+        // PENTING (dikonfirmasi dari pengetesan nyata): baris ini TIDAK PERNAH bisa menyalakan
+        // borderless sesungguhnya di printer Epson - ia cuma menol-kan margin versi .NET/GDI,
+        // sedangkan flag borderless asli Epson ada di data privat driver yang tidak tersentuh
+        // sama sekali oleh System.Drawing.Printing. Baris Margins=0 ini dipertahankan karena
+        // tidak merugikan (dan membantu driver lain yang memang membaca margin GDI), TAPI
+        // satu-satunya cara borderless benar-benar aktif adalah menyalakannya PERMANEN sebagai
+        // default di Windows: klik kanan printer > Printing Preferences > centang Borderless >
+        // OK/Apply (di luar aplikasi ini). Kalau langkah itu belum dilakukan, print job akan
+        // tetap punya hard margin fisik meski checkbox di app ini dicentang - lihat juga warning
+        // di DrawImagePage yang mendeteksi kondisi ini saat mencetak.
         if (profile.Borderless)
         {
             pageSettings.Margins = new Margins(0, 0, 0, 0);
@@ -109,6 +143,63 @@ public class ImagePrintService
                             $"({mediaTypeError ?? "unknown error"}). Job tetap dicetak dengan tipe kertas default driver.");
             }
         }
+    }
+
+    /// <summary>
+    /// FIX borderless: cari Paper Size driver yang dimensinya cocok dengan target fisik
+    /// (targetWidthMm x targetHeightMm, toleransi kecil untuk pembulatan driver) DAN punya
+    /// hard margin paling kecil di antara kandidat yang cocok. Ini menggantikan asumsi lama
+    /// bahwa "PaperSizeName yang tersimpan di profile pasti benar" - sumber utama laporan
+    /// hasil borderless masih kepotong (app sebelumnya bisa saja pakai varian "4x6in" biasa
+    /// yang punya hard margin, padahal driver punya varian borderless terpisah).
+    /// Tidak hardcode nama per merk printer - murni baca dimensi &amp; HardMarginX/Y asli dari
+    /// driver Windows, jadi generik untuk printer apa pun (termasuk Epson L8050).
+    /// </summary>
+    private static bool TryFindBestBorderlessPaperSize(
+        PrinterSettings settings, double targetWidthMm, double targetHeightMm,
+        out PaperSize? bestMatch, out double hardMarginXMm, out double hardMarginYMm)
+    {
+        const double sizeToleranceMm = 3.0; // toleransi pembulatan ukuran kertas vs Print Size
+
+        PaperSize? best = null;
+        double bestScore = double.MaxValue;
+        double bestHmX = 0, bestHmY = 0;
+
+        foreach (PaperSize size in settings.PaperSizes)
+        {
+            double wMm = size.Width / 100.0 * PrintSizeCalculator.MmPerInch;
+            double hMm = size.Height / 100.0 * PrintSizeCalculator.MmPerInch;
+
+            bool matchesPortrait =
+                Math.Abs(wMm - targetWidthMm) <= sizeToleranceMm && Math.Abs(hMm - targetHeightMm) <= sizeToleranceMm;
+            bool matchesLandscape =
+                Math.Abs(wMm - targetHeightMm) <= sizeToleranceMm && Math.Abs(hMm - targetWidthMm) <= sizeToleranceMm;
+            if (!matchesPortrait && !matchesLandscape) continue;
+
+            // PageSettings(PrinterSettings) + assign PaperSize supaya driver menghitung
+            // HardMarginX/Y KHUSUS untuk paper size kandidat ini (tidak mencetak apa pun).
+            var probe = new PageSettings(settings) { PaperSize = size };
+            double hmX = probe.HardMarginX / 100.0 * PrintSizeCalculator.MmPerInch;
+            double hmY = probe.HardMarginY / 100.0 * PrintSizeCalculator.MmPerInch;
+
+            // Skor lebih rendah = lebih diprioritaskan. Nama yang eksplisit mengandung
+            // "border"/"tanpa tepi" jadi tie-breaker kuat kalau hard margin-nya sama-sama kecil.
+            double nameBonus = size.PaperName.Contains("border", StringComparison.OrdinalIgnoreCase) ? -1000 : 0;
+            double score = hmX + hmY + nameBonus;
+
+            if (score < bestScore)
+            {
+                bestScore = score;
+                best = size;
+                bestHmX = hmX;
+                bestHmY = hmY;
+            }
+        }
+
+        bestMatch = best;
+        hardMarginXMm = bestHmX;
+        hardMarginYMm = bestHmY;
+        return best != null;
     }
 
     /// <summary>
@@ -205,16 +296,66 @@ public class ImagePrintService
         var position = new PrintSizeCalculator.PositionParams(
             positionMode, profile?.CustomOffsetXMm ?? 0, profile?.CustomOffsetYMm ?? 0);
 
-        var result = PrintSizeCalculator.Calculate(
-            scaling, pageBoundsMm, marginBoundsMm, printableAreaMm,
-            targetWidthMm, targetHeightMm, imageAspectRatio, position);
+        // REVISI KE-2 (setelah dikonfirmasi borderless driver sudah aktif via Windows Printing
+        // Preferences, tapi zoom masih terasa berlebihan): app TIDAK LAGI menambahkan bleed
+        // sendiri sama sekali (dulu 0.5mm - kecil, tapi tetap menambah zoom di atas zoom yang
+        // SUDAH dilakukan driver Epson sendiri untuk borderless-nya - dua sumber zoom
+        // bertumpuk). Sekarang app cuma merender TEPAT di ukuran fisik target (mis. 4R =
+        // 102x152mm persis, TANPA pembesaran tambahan sama sekali) - identik dengan
+        // ScalingMode.ActualSize. Kalau image aspect ratio == target aspect ratio (kasus normal
+        // untuk foto photobooth), hasilnya 0% crop dari sisi app. Sisa "zoom" yang terlihat di
+        // hasil cetak sepenuhnya berasal dari driver Epson (Printing Preferences > Borderless >
+        // tombol Settings... > Amount of Enlargement/Expansion) - itu SATU-SATUNYA tempat yang
+        // sekarang mengontrol seberapa banyak pembesaran borderless, kecilkan di sana kalau
+        // masih terlalu zoom bagi Anda.
+        PrintSizeCalculator.DrawResult result;
+        bool usingBorderlessFill = profile?.Borderless == true;
 
-        if (result.ExceedsPrintableArea)
+        if (usingBorderlessFill)
         {
+            double fillTargetWidthMm = hasPrintSize ? targetWidthMm : pageBoundsMm.Width;
+            double fillTargetHeightMm = hasPrintSize ? targetHeightMm : pageBoundsMm.Height;
+
+            double hardMarginXMm = PrintSizeCalculator.HundredthsInchToMm(e.PageSettings.HardMarginX);
+            double hardMarginYMm = PrintSizeCalculator.HundredthsInchToMm(e.PageSettings.HardMarginY);
+
+            const double bleedMm = 0.0; // tidak ada bleed tambahan dari app - lihat komentar di atas
+
+            result = PrintSizeCalculator.CalculateBorderlessFill(
+                pageBoundsMm, fillTargetWidthMm, fillTargetHeightMm, bleedMm, imageAspectRatio, position);
+
             log?.Invoke(
-                $"Warning: Target print size ({result.TargetWidthMm:0.0} x {result.TargetHeightMm:0.0} mm) " +
-                "melebihi printable area printer. Sebagian gambar mungkin ter-clip oleh printer/driver " +
-                "(ukuran Actual Size TIDAK dikecilkan oleh aplikasi).");
+                "Borderless: app render TEPAT ukuran fisik target (0 bleed tambahan). " +
+                $"ScalingMode '{scaling}' diabaikan selama Borderless dicentang. Zoom borderless " +
+                "sepenuhnya dikontrol driver Epson (Printing Preferences > Borderless > Settings...).");
+
+            // Deteksi dini: kalau hard margin driver untuk page settings SAAT INI masih cukup
+            // besar, kemungkinan besar toggle Borderless BELUM di-set permanen di Windows
+            // Printing Preferences printer ini - app tidak bisa memperbaiki ini sendiri.
+            if (hardMarginXMm > 1.0 || hardMarginYMm > 1.0)
+            {
+                log?.Invoke(
+                    $"PERINGATAN PENTING: Hard margin printer saat ini {hardMarginXMm:0.00} x " +
+                    $"{hardMarginYMm:0.00} mm - kemungkinan besar mode Borderless BELUM aktif " +
+                    "permanen di driver Windows printer ini. Aplikasi TIDAK BISA menyalakan " +
+                    "borderless asli secara programatis (flag-nya privat milik driver Epson). " +
+                    "Buka: klik kanan printer di Windows > Printing Preferences > centang " +
+                    "Borderless > Apply/OK, supaya setting ini permanen untuk semua print job.");
+            }
+        }
+        else
+        {
+            result = PrintSizeCalculator.Calculate(
+                scaling, pageBoundsMm, marginBoundsMm, printableAreaMm,
+                targetWidthMm, targetHeightMm, imageAspectRatio, position);
+
+            if (result.ExceedsPrintableArea)
+            {
+                log?.Invoke(
+                    $"Warning: Target print size ({result.TargetWidthMm:0.0} x {result.TargetHeightMm:0.0} mm) " +
+                    "melebihi printable area printer. Sebagian gambar mungkin ter-clip oleh printer/driver " +
+                    "(ukuran Actual Size TIDAK dikecilkan oleh aplikasi).");
+            }
         }
 
         log?.Invoke(
