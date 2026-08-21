@@ -13,6 +13,21 @@ public class PrinterProfile
     /// <summary>Nama Paper Size persis seperti yang dilaporkan driver (PaperSize.PaperName).</summary>
     public string PaperSizeName { get; set; } = string.Empty;
 
+    /// <summary>
+    /// true = paksa Paper Size memakai dimensi mm EXACT dari Print Size (PrintWidthMm/
+    /// PrintHeightMm), dibuat sebagai PaperSize custom langsung di kode (PaperKind.Custom) -
+    /// BUKAN memilih entri bernama dari daftar driver (PaperSizeName). Berguna kalau driver
+    /// cuma melaporkan ukuran yang dibulatkan (mis. Paper Size driver "10 x 15 cm" = 100x150mm,
+    /// padahal kertas fisik 4R yang sebenarnya dipakai adalah 102x152mm).
+    /// PERINGATAN: tidak semua driver printer menerima PaperSize custom yang tidak terdaftar di
+    /// driver itu sendiri. Kalau printer menolak/mengabaikan nilai ini, definisikan Custom Paper
+    /// Size yang sama juga di level driver Windows (Printer Properties &gt; Advanced &gt; Custom
+    /// Paper Size) supaya driver benar-benar mengenalinya.
+    /// Default false supaya profil lama (JSON tanpa field ini) tetap berperilaku persis seperti
+    /// sebelumnya - tidak ada perubahan hasil cetak untuk profil existing.
+    /// </summary>
+    public bool UseExactPaperSizeMm { get; set; } = false;
+
     public PrintQualityLevel PrintQuality { get; set; } = PrintQualityLevel.High;
 
     /// <summary>

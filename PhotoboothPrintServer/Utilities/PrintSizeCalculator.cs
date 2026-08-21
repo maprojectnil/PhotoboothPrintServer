@@ -22,6 +22,9 @@ public static class PrintSizeCalculator
     /// <summary>Konversi dari hundredths of an inch (satuan asli PrintPageEventArgs) ke mm.</summary>
     public static double HundredthsInchToMm(double hundredthsInch) => hundredthsInch / 100.0 * MmPerInch;
 
+    /// <summary>Konversi dari mm ke hundredths of an inch (satuan asli PaperSize.Width/Height .NET).</summary>
+    public static double MmToHundredthsInch(double mm) => mm / MmPerInch * 100.0;
+
     /// <summary>Rectangle sederhana dalam mm (independen dari System.Drawing).</summary>
     public readonly record struct RectMm(double X, double Y, double Width, double Height);
 

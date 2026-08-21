@@ -522,6 +522,9 @@ public partial class MainForm : Form
             chkBorderless.Checked = false;
             chkBorderless.Enabled = false;
 
+            chkExactPaperSizeMm.Checked = false;
+            chkExactPaperSizeMm.Enabled = false;
+
             lblProfileInfoValue.Text = "-";
         }
         finally
@@ -632,6 +635,10 @@ public partial class MainForm : Form
             chkBorderless.Enabled = true;
             chkBorderless.Checked = profile.Borderless;
 
+            // --- Exact mm Paper Size (bypass pembulatan driver) ---
+            chkExactPaperSizeMm.Enabled = true;
+            chkExactPaperSizeMm.Checked = profile.UseExactPaperSizeMm;
+
             // --- Paper Type / Media Type: "Driver Default" + hanya tipe yang benar-benar
             // dilaporkan driver printer aktif (banyak printer non-foto tidak melaporkan apa
             // pun lewat DeviceCapabilities - itu normal, combo tetap enabled dengan 1 opsi).
@@ -690,6 +697,7 @@ public partial class MainForm : Form
         }
 
         profile.Borderless = chkBorderless.Checked;
+        profile.UseExactPaperSizeMm = chkExactPaperSizeMm.Checked;
         ApplySelectedPaperTypeToProfile(profile);
 
         // --- Print Size / Scaling / Position (perbaikan physical-size printing) ---
@@ -710,6 +718,7 @@ public partial class MainForm : Form
                    $"Color: {(profile.ColorMode ? "Color" : "Monochrome")}, " +
                    $"Orientation: {(profile.OrientationAuto ? "Auto" : (profile.Landscape ? "Landscape" : "Portrait"))}, " +
                    $"Borderless: {profile.Borderless}, " +
+                   $"Exact mm Paper Size: {profile.UseExactPaperSizeMm}, " +
                    $"Paper Type: {(string.IsNullOrEmpty(profile.MediaTypeName) ? "Driver Default" : profile.MediaTypeName)}, " +
                    $"Print Size: {profile.PrintSizeName} [{profile.PrintWidthMm:0.#} x {profile.PrintHeightMm:0.#} mm], " +
                    $"Scaling: {profile.Scaling}, Position: {profile.Position}).");

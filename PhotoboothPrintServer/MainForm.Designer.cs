@@ -46,6 +46,7 @@ partial class MainForm
     private Label lblOrientationCaption = null!;
     private ComboBox cmbOrientation = null!;
     private CheckBox chkBorderless = null!;
+    private CheckBox chkExactPaperSizeMm = null!;
     private Label lblPrintSizeCaption = null!;
     private ComboBox cmbPrintSize = null!;
     private Label lblScalingCaption = null!;
@@ -136,6 +137,7 @@ partial class MainForm
         lblOrientationCaption = new Label();
         cmbOrientation = new ComboBox();
         chkBorderless = new CheckBox();
+        chkExactPaperSizeMm = new CheckBox();
         lblPrintSizeCaption = new Label();
         cmbPrintSize = new ComboBox();
         lblScalingCaption = new Label();
@@ -328,7 +330,7 @@ partial class MainForm
         // grpPrinterProfile
         grpPrinterProfile.Text = "Printer Profile";
         grpPrinterProfile.Location = new Point(20, 380);
-        grpPrinterProfile.Size = new Size(680, 285);
+        grpPrinterProfile.Size = new Size(680, 315);
         grpPrinterProfile.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
 
         btnUndockPrinterProfile.Text = "☰";
@@ -460,6 +462,16 @@ partial class MainForm
         lblProfileInfoValue.Font = new Font("Segoe UI", 8.5F, FontStyle.Italic);
         lblProfileInfoValue.ForeColor = Color.DimGray;
 
+        // --- Exact mm Paper Size (bypass pembulatan driver, mis. "10x15cm" -> 102x152mm asli) ---
+        chkExactPaperSizeMm.Text = "Paper Size exact mm (bypass ukuran dibulatkan driver, pakai dimensi Print Size persis)";
+        chkExactPaperSizeMm.Location = new Point(15, 270);
+        chkExactPaperSizeMm.AutoSize = true;
+        chkExactPaperSizeMm.CheckedChanged += ProfileControl_Changed;
+        tooltipUndock.SetToolTip(chkExactPaperSizeMm,
+            "Paksa Paper Size pakai dimensi mm PERSIS dari Print Size (mis. 4R = 102x152mm), " +
+            "bukan entri dibulatkan driver (mis. \"10 x 15 cm\" = 100x150mm). " +
+            "Tidak semua driver printer menerima ukuran custom ini.");
+
         grpPrinterProfile.Controls.Add(lblPaperSizeCaption);
         grpPrinterProfile.Controls.Add(cmbPaperSize);
         grpPrinterProfile.Controls.Add(lblPrintQualityCaption);
@@ -475,6 +487,7 @@ partial class MainForm
         grpPrinterProfile.Controls.Add(lblPositionCaption);
         grpPrinterProfile.Controls.Add(cmbPosition);
         grpPrinterProfile.Controls.Add(chkBorderless);
+        grpPrinterProfile.Controls.Add(chkExactPaperSizeMm);
         grpPrinterProfile.Controls.Add(lblCustomSizeCaption);
         grpPrinterProfile.Controls.Add(txtCustomWidthMm);
         grpPrinterProfile.Controls.Add(lblCustomSizeSeparator);
@@ -487,7 +500,7 @@ partial class MainForm
 
         // grpQueue
         grpQueue.Text = "HTTP API && Print Queue";
-        grpQueue.Location = new Point(20, 675);
+        grpQueue.Location = new Point(20, 705);
         grpQueue.Size = new Size(680, 240);
         grpQueue.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
 
@@ -565,7 +578,7 @@ partial class MainForm
 
         // grpHistory
         grpHistory.Text = "Print History";
-        grpHistory.Location = new Point(20, 925);
+        grpHistory.Location = new Point(20, 955);
         grpHistory.Size = new Size(680, 230);
         grpHistory.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
 
@@ -610,7 +623,7 @@ partial class MainForm
 
         // grpLog
         grpLog.Text = "Log";
-        grpLog.Location = new Point(20, 1165);
+        grpLog.Location = new Point(20, 1195);
         grpLog.Size = new Size(680, 150);
         grpLog.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
 
@@ -673,7 +686,7 @@ partial class MainForm
         // MainForm
         AutoScaleMode = AutoScaleMode.Font;
         AutoScroll = true;
-        ClientSize = new Size(720, 1015);
+        ClientSize = new Size(720, 1045);
         MinimumSize = new Size(680, 500);
         Text = "Photobooth Print Server";
         StartPosition = FormStartPosition.CenterScreen;

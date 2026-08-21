@@ -68,8 +68,38 @@ public class ImagePrintService
         // masih berguna untuk driver LAIN yang memang punya entri Paper Size terpisah untuk
         // borderless (mis. beberapa driver Canon/HP), tapi untuk Epson biasanya cuma ada SATU
         // entri per ukuran fisik - jadi jangan berharap ini "menyalakan" borderless sendirian.
+        // Custom Paper Size (exact mm) - PRIORITAS TERTINGGI di antara ketiga cara pemilihan
+        // Paper Size. Kalau diaktifkan, dimensi Paper Size TIDAK diambil dari driver sama
+        // sekali, melainkan dibuat sendiri persis dari profile.PrintWidthMm x PrintHeightMm
+        // (mis. 4R = 102 x 152mm persis, bukan "10 x 15 cm" versi dibulatkan driver). Lihat
+        // PrinterProfile.UseExactPaperSizeMm untuk detail & peringatan kompatibilitas driver.
+        bool exactPaperSizeApplied = false;
+        if (profile.UseExactPaperSizeMm && profile.PrintWidthMm > 0 && profile.PrintHeightMm > 0)
+        {
+            int widthHundredths = (int)Math.Round(PrintSizeCalculator.MmToHundredthsInch(profile.PrintWidthMm));
+            int heightHundredths = (int)Math.Round(PrintSizeCalculator.MmToHundredthsInch(profile.PrintHeightMm));
+
+            if (widthHundredths > 0 && heightHundredths > 0)
+            {
+                var customPaper = new PaperSize(
+                    $"Custom {profile.PrintWidthMm:0.#}x{profile.PrintHeightMm:0.#}mm (exact)",
+                    widthHundredths, heightHundredths);
+                pageSettings.PaperSize = customPaper;
+                exactPaperSizeApplied = true;
+
+                log?.Invoke(
+                    $"Paper Size: dipaksa custom exact {profile.PrintWidthMm:0.#} x {profile.PrintHeightMm:0.#} mm " +
+                    $"({widthHundredths} x {heightHundredths} 1/100 inci), menggantikan entri driver " +
+                    $"'{(string.IsNullOrWhiteSpace(profile.PaperSizeName) ? "-" : profile.PaperSizeName)}'. " +
+                    "CATATAN: kalau driver printer menolak/mengabaikan ukuran custom ini (umum untuk " +
+                    "printer foto consumer yang cuma menerima Paper Size terdaftar), definisikan Custom " +
+                    "Paper Size yang sama di level Windows (Printer Properties > Advanced > Custom Paper " +
+                    "Size) supaya driver benar-benar mengenalinya, lalu pilih lewat Paper Size biasa.");
+            }
+        }
+
         bool borderlessPaperAutoSelected = false;
-        if (profile.Borderless && profile.PrintWidthMm > 0 && profile.PrintHeightMm > 0 &&
+        if (!exactPaperSizeApplied && profile.Borderless && profile.PrintWidthMm > 0 && profile.PrintHeightMm > 0 &&
             TryFindBestBorderlessPaperSize(settings, profile.PrintWidthMm, profile.PrintHeightMm,
                 out var autoPaper, out var autoHmX, out var autoHmY))
         {
@@ -83,9 +113,9 @@ public class ImagePrintService
                 "lihat catatan di bawah).");
         }
 
-        // Paper Size manual - dipakai kalau bukan mode borderless (atau auto-select borderless
-        // di atas gagal menemukan kandidat sama sekali), sama seperti perilaku lama.
-        if (!borderlessPaperAutoSelected && !string.IsNullOrWhiteSpace(profile.PaperSizeName))
+        // Paper Size manual - dipakai kalau bukan mode custom exact mm / borderless auto-select
+        // di atas (atau keduanya gagal menemukan kandidat), sama seperti perilaku lama.
+        if (!exactPaperSizeApplied && !borderlessPaperAutoSelected && !string.IsNullOrWhiteSpace(profile.PaperSizeName))
         {
             foreach (PaperSize size in settings.PaperSizes)
             {
